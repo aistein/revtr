@@ -5,3 +5,4 @@ mappings/
 test/
 train/
 credentials.json
+config.local

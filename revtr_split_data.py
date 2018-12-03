@@ -1,4 +1,4 @@
-#!/Users/alexstein/anaconda3/bin/python
+#!/usr/bin/python
 
 # revtr_split_data.py
 # usage: (remote)
@@ -31,7 +31,7 @@
 # SERVER ...
 # runtime flag indicating whether this script is being run from a local machine or directly
 # from the server where VP measurement files reside.
-SERVER = True
+SERVER = False
 
 import sys
 import os
@@ -42,7 +42,9 @@ import threading
 from collections import defaultdict
 
 # globals
-mapfile = "mappings/dests_by_prefix.json"
+traindir = "data/train/vp_measurements/"
+testdir = "data/test/vp_measurements/"
+mapfile = "data/mappings/dests_by_prefix.json"
 ddict = defaultdict(tuple) # items look like {... , dest-ip: ("train"/"test", dnet-prefix)}
 if SERVER:
     try:
@@ -50,7 +52,7 @@ if SERVER:
     except IndexError:
         raise ValueError('error: please enter <path to vpfiles dir>')
 else:
-    vpdir = "vps/"
+    vpdir = "data/vps/"
 
 # _tag
 # given 'ip' tell me if 'ip' has been marked for "test" or for "train"
@@ -76,8 +78,8 @@ def _filterbydest(vpfile):
 # The split is based on tags assigned to each destination IP address, to be found in ddict
 def _writetask(vpfile):
     print("Thread executing write task for VP: {}...\n".format(vpfile))
-    trainfile = open("train/vp_measurements/" + vpfile, 'w')
-    testfile = open("test/vp_measurements/" + vpfile, 'w')
+    trainfile = open(traindir + vpfile, 'w')
+    testfile = open(testdir + vpfile, 'w')
     for ((target, dnet), dest, hops) in _filterbydest(vpfile):
         if dnet == str(None):
             continue

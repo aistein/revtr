@@ -1,4 +1,4 @@
-#!/Users/alexstein/anaconda3/bin/python
+#!/usr/bin/python
 
 import re, pycurl
 from io import BytesIO

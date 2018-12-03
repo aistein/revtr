@@ -1,4 +1,4 @@
-#!/Users/alexstein/anaconda3/bin/python
+#!/usr/bin/python
 
 # revtr_map_dests_to_dnet.py
 # - parse all VP CSV files, one-by-one from the online source
@@ -13,18 +13,12 @@
 # - be sure to update the BGP datadump before running this script
 # - to do so, run ./scripts/refresh
 
-# SERVER ...
-# runtime flag indicating whether this script is being run from a local machine or directly
-# from the server where VP measurement files reside.
-SERVER = True
-
 # for data parsing
 import pyasn
 import threading
 import datetime
 import time
 import json
-import wget
 import os
 import sys
 import csv
@@ -32,8 +26,17 @@ from collections import defaultdict
 
 # for file download, etc.
 import re, pycurl
-from io import BytesIO
 from bs4 import BeautifulSoup
+
+# SERVER ...
+# runtime flag indicating whether this script is being run from a local machine or directly
+# from the server where VP measurement files reside.
+SERVER = False
+
+# ROOTURL ...
+# this is where measurement files will be downloaded from if operating in REMOTE mode
+#  rooturl = "http://bgoodc.cs.columbia.edu/old_rr_data/"
+rooturl = "http://bgoodc.cs.columbia.edu/storage/measurements_2018/csv_echo_replies_20181201/"
 
 # process external inputs
 if SERVER: # SERVER mode
@@ -47,13 +50,14 @@ if SERVER: # SERVER mode
 
 else: # REMOTE mode
 
-    # tag = datetime.datetime.now().strftime('%Y-%m-%d')
+    tag = datetime.datetime.now().strftime('%Y-%m-%d')
     # TODO: toggle comments of the lines above and below to switch between 2011 and latest BGP-dumps
-    tag = "2018-11-29" # day of BGP data from when the original measurements were collected
-    bgpdumpfile = 'bgpdumps/'+tag+'.dat'
+    # TODO: implement 'config file digestion' to minimize need for user interactivity
+    # tag = "2018-11-29" # day of BGP data from when the original measurements were collected
+    bgpdumpfile = './data/bgpdumps/'+tag+'.dat'
 
     # directory where VP files will be stored
-    vpdir = "./vps"
+    vpdir = "./data/vps"
 
     # username and password for cget is passed via credentials.json file
     try:
@@ -168,8 +172,6 @@ def GroupByPrefix(vp):
 # File/Dir Processing Functions
 #==========================================================
 
-rooturl = "http://bgoodc.cs.columbia.edu/old_rr_data/"
-
 # cget
 # the python wget package has no options, so using curl instead
 if not SERVER:
@@ -188,14 +190,14 @@ if not SERVER:
 # SetupDirs ...
 # Ensures that the directories we need are correctly set up
 def SetupDirs():
-    if not os.path.exists('./mappings'):
-        os.makedirs('./mappings')
-    if not os.path.exists('./vps'):
-        os.makedirs('./vps')
-    if not os.path.exists('./test/vp_measurements'):
-        os.makedirs('./test/vp_measurements')
-    if not os.path.exists('./train/vp_measurements'):
-        os.makedirs('./train/vp_measurements')
+    if not os.path.exists('./data/mappings'):
+        os.makedirs('./data/mappings')
+    if not os.path.exists('./data/vps'):
+        os.makedirs('./data/vps')
+    if not os.path.exists('./data/test/vp_measurements'):
+        os.makedirs('./data/test/vp_measurements')
+    if not os.path.exists('./data/train/vp_measurements'):
+        os.makedirs('./data/train/vp_measurements')
 
 #==========================================================
 # Main
@@ -215,7 +217,7 @@ def main():
     else: # REMOTE mode
         vplisthtml = cget("")
         soup = BeautifulSoup(open(vplisthtml,'r'),'html.parser')
-        num_to_read = 10 # TODO: only here while I write the scripts
+        num_to_read = 3 # TODO: only here while I write the scripts
         for hit in soup.find_all('a'):
             match = re.match(r'^.*csv', hit['href'])
             if match and num_to_read > 0:
@@ -229,7 +231,7 @@ def main():
         print("Processed " + vpcsv + "...")
 
     # dump into json file
-    with open('mappings/dests_by_prefix.json', 'w') as prefixfile:    
+    with open('./data/mappings/dests_by_prefix.json', 'w') as prefixfile:    
         json.dump({ k:list(v) for k, v in dest_by_prefix.items() }, prefixfile)
 
     end = time.time()
