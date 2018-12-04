@@ -5,10 +5,8 @@
 # - filter out paths > 9 hops
 # - write out a JSON file that maps each destination to its BGP-prefix
 # - PURPOSE: the above file will be used to split data into test and training sets
-# usage: (remote)
+# usage:
 # - ./revtr_map_dests_to_dnet.py
-# usage: (server)
-# - ./revtr_map_dests_to_dnet.py <fullpath to BGP dump> <fullpath to VP directory>
 # note:
 # - be sure to update the BGP datadump before running this script
 # - to do so, run ./scripts/refresh
@@ -36,8 +34,6 @@ try:
     credfile = open("./credentials.yml", 'r')
     configfile = open("./config.yml", 'r')
     configurations = {**yaml.load(credfile), **yaml.load(configfile)}
-    for entry in configurations:
-        print(configurations[entry])
     credfile.close()
     configfile.close()
 except (FileNotFoundError,IndexError):
@@ -57,6 +53,9 @@ vpdir = configurations['vpdir']
 
 # directory where all output data should be stored
 datadir = configurations['datadir']
+
+# the number of VPs we'd like to process
+numvps = configurations['numvps']
 
 # username and password
 userpwd = configurations['username']+":"+configurations['password']
@@ -214,7 +213,7 @@ def main():
     else: # remote system; must download measurements
         vplisthtml = cget("")
         soup = BeautifulSoup(open(vplisthtml,'r'),'html.parser')
-        num_to_read = 1 # TODO: only here while I write the scripts
+        num_to_read = numvps
         for hit in soup.find_all('a'):
             match = re.match(r'^.*csv', hit['href'])
             if match and num_to_read > 0:

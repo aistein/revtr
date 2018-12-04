@@ -1,10 +1,8 @@
 #!/usr/bin/python
 
 # revtr_split_data.py
-# usage: (remote)
+# usage:
 # - ./revtr_split_data.py
-# usage: (server)
-# - ./revtr_split_data.py <path to VP files>
 #
 # function:
 # - create the following file hierarchy for test and training data
