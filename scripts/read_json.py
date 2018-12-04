@@ -1,4 +1,4 @@
-#!/Users/alexstein/anaconda3/bin/python
+#!/usr/bin/python
 # usage: ./scripts/read_json.py <json_file>.json | less
 # function: pretty print the json file for readability
 import sys, json

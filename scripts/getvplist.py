@@ -1,18 +1,27 @@
-#!/Users/alexstein/anaconda3/bin/python
+#!/usr/bin/python
 
-import re, pycurl
+import re, pycurl, yaml
 from io import BytesIO
 from bs4 import BeautifulSoup
 
-url = "http://bgoodc.cs.columbia.edu/rr/measurements_2017/"
+try:
+    credfile = open("./credentials.yml", 'r')
+    credentials = yaml.load(credfile)
+    credfile.close()
+except (FileNotFoundError,IndexError):
+    raise ValueError('error: credentials.yml files either not found or incorrect.')
+
+# userpwd to be used by cget function
+userpwd = credentials['username'] + ":" + credentials['password']
+
+url = "http://bgoodc.cs.columbia.edu/storage/measurements_2018/csv_echo_replies_20181201/"
 
 # the python wget package has no options, so using curl instead
 def cget(url):
     buffer = BytesIO()
     c = pycurl.Curl()
     c.setopt(c.URL, url)
-    # TODO: put the username and password in a file
-    c.setopt(c.USERPWD, 'rr:ELEN6775ResearchGroup')
+    c.setopt(c.USERPWD, userpwd)
     c.setopt(c.WRITEDATA, buffer)
     c.perform()
     c.close()

@@ -1,10 +1,8 @@
-#!/Users/alexstein/anaconda3/bin/python
+#!/usr/bin/python
 
 # revtr_split_data.py
-# usage: (remote)
+# usage:
 # - ./revtr_split_data.py
-# usage: (server)
-# - ./revtr_split_data.py <path to VP files>
 #
 # function:
 # - create the following file hierarchy for test and training data
@@ -31,26 +29,51 @@
 # SERVER ...
 # runtime flag indicating whether this script is being run from a local machine or directly
 # from the server where VP measurement files reside.
-SERVER = True
+SERVER = False
 
 import sys
 import os
+import yaml
 import json
 import time
 import csv
 import threading
 from collections import defaultdict
 
-# globals
-mapfile = "mappings/dests_by_prefix.json"
-ddict = defaultdict(tuple) # items look like {... , dest-ip: ("train"/"test", dnet-prefix)}
-if SERVER:
-    try:
-        vpdir = sys.argv[1]
-    except IndexError:
-        raise ValueError('error: please enter <path to vpfiles dir>')
-else:
-    vpdir = "vps/"
+#==========================================================
+# Configuration Parsing (YAML)
+#==========================================================
+
+try:
+    configfile = open("./config.yml", 'r')
+    configurations = yaml.load(configfile)
+    configfile.close()
+except (FileNotFoundError,IndexError):
+    raise ValueError('error: config.yml either not found or incorrect.')
+
+
+# flag indicating if the measurement files need to be downloaded or if they are stored locally
+download = configurations['download']
+
+# directory where VP files will be stored
+vpdir = configurations['vpdir']
+
+# directory where all output data should be stored
+datadir = configurations['datadir']
+
+# sources / outputs
+traindir = datadir + "/train/vp_measurements"
+testdir = datadir + "/test/vp_measurements"
+mapfile = datadir + "/mappings/dests_by_prefix.json"
+
+#==========================================================
+# Core Data Splitting Functions
+#==========================================================
+
+# ddict
+# dictionary that will hold decision to place in train/test for all destinations
+# items look like {... , dest-ip: ("train"/"test", dnet-prefix)}
+ddict = defaultdict(tuple)
 
 # _tag
 # given 'ip' tell me if 'ip' has been marked for "test" or for "train"
@@ -66,7 +89,7 @@ def _tag(ip):
 # returns 3-tuple (tag, dest-ip, [ping-hops]), where tag = ("train/test", dnet-prefix)
 def _filterbydest(vpfile):
     # print("Filtering VP: {}".format(vpfile))
-    with open(vpdir+vpfile, 'r') as csvfile:
+    with open(vpdir + '/' + vpfile, 'r') as csvfile:
         datareader = csv.reader(csvfile)
         yield from map(lambda ping: (_tag(ping[0]), ping[0], ping[1:]),
             filter(lambda ping: _tag(ping[0]) != None, datareader))
@@ -76,8 +99,8 @@ def _filterbydest(vpfile):
 # The split is based on tags assigned to each destination IP address, to be found in ddict
 def _writetask(vpfile):
     print("Thread executing write task for VP: {}...\n".format(vpfile))
-    trainfile = open("train/vp_measurements/" + vpfile, 'w')
-    testfile = open("test/vp_measurements/" + vpfile, 'w')
+    trainfile = open(traindir + '/' + vpfile, 'w')
+    testfile = open(testdir + '/' + vpfile, 'w')
     for ((target, dnet), dest, hops) in _filterbydest(vpfile):
         if dnet == str(None):
             continue
@@ -98,6 +121,10 @@ def WriteSet(vpfile):
     t = threading.Thread(target=_writetask, args=(vpfile,), name=vpfile)
     t.start()
     return t
+
+#==========================================================
+# Main
+#==========================================================
 
 def main():
     start = time.time()
