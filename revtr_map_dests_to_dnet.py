@@ -16,8 +16,8 @@
 # for data parsing
 import pyasn
 import threading
-import datetime
 import time
+import yaml
 import json
 import os
 import sys
@@ -28,50 +28,44 @@ from collections import defaultdict
 import re, pycurl
 from bs4 import BeautifulSoup
 
-# SERVER ...
-# runtime flag indicating whether this script is being run from a local machine or directly
-# from the server where VP measurement files reside.
-SERVER = False
+#==========================================================
+# Configuration Parsing (YAML)
+#==========================================================
 
-# ROOTURL ...
-# this is where measurement files will be downloaded from if operating in REMOTE mode
-#  rooturl = "http://bgoodc.cs.columbia.edu/old_rr_data/"
-rooturl = "http://bgoodc.cs.columbia.edu/storage/measurements_2018/csv_echo_replies_20181201/"
+try:
+    credfile = open("./credentials.yml", 'r')
+    configfile = open("./config.yml", 'r')
+    configurations = {**yaml.load(credfile), **yaml.load(configfile)}
+    for entry in configurations:
+        print(configurations[entry])
+    credfile.close()
+    configfile.close()
+except (FileNotFoundError,IndexError):
+    raise ValueError('error: config.yml or credentials.yml files either not found or incorrect.')
 
-# process external inputs
-if SERVER: # SERVER mode
+# flag indicating if the measurement files need to be downloaded or if they are stored locally
+download = configurations['download']
 
-    # get the BGP-dumpfile path and the VP measurement directory path from CLI
-    try:
-        bgpdumpfile = sys.argv[1]
-        vpdir = sys.argv[2]
-    except IndexError:
-        raise ValueError('error: please enter <path to BGP-dump> <path to vpfiles dir>')
+# rooturl where measurement files will be downloaded from
+rooturl = configurations['rooturl']
 
-else: # REMOTE mode
+# bgpdumpfile containing DB to be used for IP<-->Prefix mapping
+bgpdumpfile = configurations['bgpdump']
 
-    tag = datetime.datetime.now().strftime('%Y-%m-%d')
-    # TODO: toggle comments of the lines above and below to switch between 2011 and latest BGP-dumps
-    # TODO: implement 'config file digestion' to minimize need for user interactivity
-    # tag = "2018-11-29" # day of BGP data from when the original measurements were collected
-    bgpdumpfile = './data/bgpdumps/'+tag+'.dat'
+# directory where VP files will be stored
+vpdir = configurations['vpdir']
 
-    # directory where VP files will be stored
-    vpdir = "./data/vps"
+# directory where all output data should be stored
+datadir = configurations['datadir']
 
-    # username and password for cget is passed via credentials.json file
-    try:
-        credfile = "./credentials.json"
-        with open(credfile, 'r') as jsonfile:
-            json_data = json.load(jsonfile)
-            userpwd = json_data["username"]+":"+json_data["password"]
-    except (FileNotFoundError,IndexError):
-        raise ValueError('error: no/incorrect credentials.json file found.')
-
+# username and password
+userpwd = configurations['username']+":"+configurations['password']
 
 #==========================================================
 # BGP Processing Functions
 #==========================================================
+
+# asndb
 # the BGP-dump DB must be global
 # - it will be accessed concurrently by multiple threads   
 asndb = pyasn.pyasn(bgpdumpfile)
@@ -111,7 +105,7 @@ def _prefixinfo(ip, destinfo):
 # Yields ip-address
 # Adapted from StackOverflow post: https://stackoverflow.com/a/17444799/3341596
 def FilterAndCount(vp):
-    if SERVER or os.path.isfile(vpdir + '/' + vp + ".csv"):
+    if not download or os.path.isfile(vpdir + '/' + vp + ".csv"):
         filename = vpdir + '/' + vp + ".csv"
     else:
         filename = cget(vp+'.csv')
@@ -174,9 +168,12 @@ def GroupByPrefix(vp):
 
 # cget
 # the python wget package has no options, so using curl instead
-if not SERVER:
+if download:
     def cget(extension):
-        filename = vpdir + '/data_' + extension
+        if extension == "":
+            filename = vpdir + '/vplist'
+        else:
+            filename = vpdir + '/' + extension
         with open(filename, 'wb') as f:
             url = rooturl + extension
             c = pycurl.Curl()
@@ -190,14 +187,14 @@ if not SERVER:
 # SetupDirs ...
 # Ensures that the directories we need are correctly set up
 def SetupDirs():
-    if not os.path.exists('./data/mappings'):
-        os.makedirs('./data/mappings')
-    if not os.path.exists('./data/vps'):
-        os.makedirs('./data/vps')
-    if not os.path.exists('./data/test/vp_measurements'):
-        os.makedirs('./data/test/vp_measurements')
-    if not os.path.exists('./data/train/vp_measurements'):
-        os.makedirs('./data/train/vp_measurements')
+    if not os.path.exists(datadir+'/mappings'):
+        os.makedirs(datadir+'/mappings')
+    if not os.path.exists(datadir+'/vps') and download:
+        os.makedirs(datadir+'/vps')
+    if not os.path.exists(datadir+'/test/vp_measurements'):
+        os.makedirs(datadir+'/test/vp_measurements')
+    if not os.path.exists(datadir+'/train/vp_measurements'):
+        os.makedirs(datadir+'/train/vp_measurements')
 
 #==========================================================
 # Main
@@ -211,13 +208,13 @@ def main():
 
     # get and process the list of vp-csv files
     vplist = set()
-    if SERVER: # SERVER mode
+    if not download: # operating on measurement server
         for vpfile in os.listdir(vpdir):
             vplist.add(vpfile)
-    else: # REMOTE mode
+    else: # remote system; must download measurements
         vplisthtml = cget("")
         soup = BeautifulSoup(open(vplisthtml,'r'),'html.parser')
-        num_to_read = 3 # TODO: only here while I write the scripts
+        num_to_read = 1 # TODO: only here while I write the scripts
         for hit in soup.find_all('a'):
             match = re.match(r'^.*csv', hit['href'])
             if match and num_to_read > 0:
@@ -230,8 +227,8 @@ def main():
         GroupByPrefix(os.path.splitext(vpcsv)[0]) # removes the ".csv"
         print("Processed " + vpcsv + "...")
 
-    # dump into json file
-    with open('./data/mappings/dests_by_prefix.json', 'w') as prefixfile:    
+    # dump mappings into json file
+    with open(datadir+'/mappings/dests_by_prefix.json', 'w') as prefixfile:    
         json.dump({ k:list(v) for k, v in dest_by_prefix.items() }, prefixfile)
 
     end = time.time()

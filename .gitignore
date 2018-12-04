@@ -1,8 +1,3 @@
 logs/
-vps/
-bgpdumps/
-mappings/
-test/
-train/
-credentials.json
-config.local
+data/
+credentials.yml
