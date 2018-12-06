@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/local/bin/python3
 
 import re, pycurl, yaml
 from io import BytesIO

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/local/bin/python3
 # usage: ./scripts/read_json.py <json_file>.json | less
 # function: pretty print the json file for readability
 import sys, json

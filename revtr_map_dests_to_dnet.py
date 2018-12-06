@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/local/bin/python3
 
 # revtr_map_dests_to_dnet.py
 # - parse all VP CSV files, one-by-one from the online source
