@@ -1,12 +1,13 @@
 #!/bin/bash
 
+tag=`date +%Y-%m-%d`
+if [ ! -d "./data/bgpdumps" ]; then
+    mkdir ./data/bgpdumps
+fi
+
 # download the latest BGP-dump
 ./scripts/pyasn_util_download.py --latest
 
 # convert the file to a python-queryable database
-tag=`date +%Y-%m-%d`
-if [ ! -d ./data/bgpdumps ]; then
-    mkdir ./data/bgpdumps
-fi
 ./scripts/pyasn_util_convert.py --single *.bz2 ./data/bgpdumps/$tag.dat
 rm *.bz2

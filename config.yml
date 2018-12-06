@@ -1,6 +1,8 @@
-download: true
+download: false
 bgpdump: data/bgpdumps/2018-12-03.dat
 rooturl: http://bgoodc.cs.columbia.edu/storage/measurements_2018/csv_echo_replies_20181201/
 datadir: data
 vpdir: data/vps
 numvps: 100
+# groupby - must be one of (prefix,asn,s24)
+groupby: asn

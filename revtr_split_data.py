@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 # revtr_split_data.py
+# -------------------
 # usage:
 # - ./revtr_split_data.py
 #
@@ -25,11 +26,6 @@
 # - "test" split will contain 2/3rds of 'unique dest-IPs' per bgp-routable-prefix
 # - In other words, "training" and "test" are guaranteed NOT to have the same
 #   destination IPs, but will still properly split measurements from the same prefix. 
-
-# SERVER ...
-# runtime flag indicating whether this script is being run from a local machine or directly
-# from the server where VP measurement files reside.
-SERVER = False
 
 import sys
 import os
@@ -61,10 +57,13 @@ vpdir = configurations['vpdir']
 # directory where all output data should be stored
 datadir = configurations['datadir']
 
+# groupby indicates the which of the methods (prefix,asn,s24) we care about
+groupby = configurations['groupby']
+
 # sources / outputs
 traindir = datadir + "/train/vp_measurements"
 testdir = datadir + "/test/vp_measurements"
-mapfile = datadir + "/mappings/dests_by_prefix.json"
+mapfile = datadir + "/mappings/dests_by_"+groupby+".json"
 
 #==========================================================
 # Core Data Splitting Functions
@@ -99,8 +98,8 @@ def _filterbydest(vpfile):
 # The split is based on tags assigned to each destination IP address, to be found in ddict
 def _writetask(vpfile):
     print("Thread executing write task for VP: {}...\n".format(vpfile))
-    trainfile = open(traindir + '/' + vpfile, 'w')
-    testfile = open(testdir + '/' + vpfile, 'w')
+    trainfile = open(traindir + '/' + groupby + '/' + vpfile, 'w')
+    testfile = open(testdir + '/' + groupby + '/' + vpfile, 'w')
     for ((target, dnet), dest, hops) in _filterbydest(vpfile):
         if dnet == str(None):
             continue
@@ -123,11 +122,26 @@ def WriteSet(vpfile):
     return t
 
 #==========================================================
+# File/Dir Processing Functions
+#==========================================================
+
+# SetupDirs ...
+# Ensures that the directories we need are correctly set up
+def SetupDirs():
+    if not os.path.exists(datadir+'/test/vp_measurements/'+groupby):
+        os.makedirs(datadir+'/test/vp_measurements/'+groupby)
+    if not os.path.exists(datadir+'/train/vp_measurements/'+groupby):
+        os.makedirs(datadir+'/train/vp_measurements/'+groupby)
+
+#==========================================================
 # Main
 #==========================================================
 
 def main():
     start = time.time()
+
+    # setup the needed directory structure
+    SetupDirs()
 
     # Split the annotated, filtered measurement data into two sets
     num_prefixes = 0
@@ -148,7 +162,7 @@ def main():
                     # increment the index
                     index = index + 1
 
-    print("Input contained {} unique, viable BGP-routable prefixes.\n".format(num_prefixes))
+    print("Input contained {} unique, viable destination networks.\n".format(num_prefixes))
     print("Identified {} unique destination IPs to split.\n".format(len(ddict.keys())))
 
     # for each VP, create trianing and test CSV files
@@ -163,6 +177,7 @@ def main():
     for t in threads:
         print("Waiting for thread {} to complete...\n".format(t.name))
         t.join()
+        print("Thread {} to completed.\n".format(t.name))
     
     end = time.time()
     print("time elapsed: {}".format(end-start)) 
