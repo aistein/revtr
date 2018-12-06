@@ -180,8 +180,8 @@ def GroupTask(vp):
             dest_by_asn[asn].add(dest)
         dest_by_s24[s24].add(dest)
         
-        print("From VP:{}, mapped dest:{} to prefix {}, asn {}, s24 {}.".format(
-            vp, dest, prefix, asn, s24))
+        #print("From VP:{}, mapped dest:{} to prefix {}, asn {}, s24 {}.".format(
+            #vp, dest, prefix, asn, s24))
 
     # store the groupings in intermediate pickle file
     # - stored as 3 pickle objects -> will have to be read in loop
@@ -289,6 +289,7 @@ def DumpMappings():
 
 def main():
     start = time.time()
+    print("revtr_map_dests_to_dnet: starting main()")
 
     # setup the needed directory structure
     SetupDirs()
@@ -314,23 +315,23 @@ def main():
     # deploy 'in parallel' one _grouptask per VP
     # - only doing 10 at a time so as not to overwhelm RAM
     max_threads = numcpus
-    thread_cnt = 0
     threads = set()
     for vp in vplist:
         t = threading.Thread(target=GroupTask, args=(vp,), name=vp+'.grouper')
         t.start()
         threads.add(t)
-        thread_cnt = thread_cnt + 1
+        print("thread_cnt = {}".format(len(threads)))
         print("Deployed group task for " + vp + "...")
 
         # once numcpus threads are deployed, wait for them to finish before moving on
-        if thread_cnt == max_threads:
-            thread_cnt = 0
-            for t in threads:
+        if len(threads) >= max_threads:
+            print("{} threads are active, waiting for cores to free up...".format(len(threads)))
+            for t in threads.copy():
                 print("Waiting for thread {} to complete...\n".format(t.name))
                 t.join()
+                print("Thread {} completed.\n".format(t.name))
                 threads.remove(t)
-                print("Thread {} to completed.\n".format(t.name))
+                print("Removed completed thread {} from runlist".format(t.name))
 
 
     # wait for all remaining _grouptask threads to complete
