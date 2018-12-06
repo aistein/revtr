@@ -58,6 +58,9 @@ datadir = configurations['datadir']
 # the number of VPs we'd like to process
 numvps = configurations['numvps']
 
+# the number of CPUs available on the running machine
+numcpus = configurations['numcpus']
+
 # username and password
 userpwd = configurations['username']+":"+configurations['password']
 
@@ -294,7 +297,7 @@ def main():
     vplist = set()
     if not download: # operating on measurement server
         for vpfile in os.listdir(vpdir):
-            vplist.add(vpfile)
+            vplist.add(os.path.splitext(vpfile)[0])
     else: # remote system; must download measurements
         vplisthtml = cget("")
         soup = BeautifulSoup(open(vplisthtml,'r'),'html.parser')
@@ -309,14 +312,28 @@ def main():
         os.remove(vplisthtml)
 
     # deploy 'in parallel' one _grouptask per VP
+    # - only doing 10 at a time so as not to overwhelm RAM
+    max_threads = numcpus
+    thread_cnt = 0
     threads = set()
     for vp in vplist:
         t = threading.Thread(target=GroupTask, args=(vp,), name=vp+'.grouper')
         t.start()
         threads.add(t)
+        thread_cnt = thread_cnt + 1
         print("Deployed group task for " + vp + "...")
 
-    # wait for all _grouptask threads to complete
+        # once numcpus threads are deployed, wait for them to finish before moving on
+        if thread_cnt == max_threads:
+            thread_cnt = 0
+            for t in threads:
+                print("Waiting for thread {} to complete...\n".format(t.name))
+                t.join()
+                threads.remove(t)
+                print("Thread {} to completed.\n".format(t.name))
+
+
+    # wait for all remaining _grouptask threads to complete
     for t in threads:
         print("Waiting for thread {} to complete...\n".format(t.name))
         t.join()

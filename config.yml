@@ -4,5 +4,6 @@ rooturl: http://bgoodc.cs.columbia.edu/storage/measurements_2018/csv_echo_replie
 datadir: data
 vpdir: data/vps
 numvps: 100
+numcpus: 8
 # groupby - must be one of (prefix,asn,s24)
 groupby: asn
