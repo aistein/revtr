@@ -1,0 +1,7 @@
+results_dir: /home/ubuntu/data/results_final
+rankings_dir: /home/ubuntu/data/ext_results
+probe_dir: /home/ubuntu/data/test/vp_measurements
+K: 10
+dnet_type: s24
+ipasn_file: /home/ubuntu/data/bgpdumps/2018-12-03.dat
+refresh: false
