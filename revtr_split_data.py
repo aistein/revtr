@@ -7,11 +7,11 @@
 #
 # function:
 # - create the following file hierarchy for test and training data
-# --train-----vp_measurements (1/3 of input data)
+# --train-----vp_measurements (4/5 of input data)
 #                    |
 #                <vp_name>.csv
 #                dnet, dst, [hops path]
-# --test------vp_measurements (2/3 of input data)
+# --test------vp_measurements (1/5 of input data)
 #                    |
 #                <vp_name>.csv
 #                dnet, dst, [hops path]
@@ -19,11 +19,11 @@
 # note:
 # - the input JSON file is expected to have the following format
 #    {
-#       <bgp-routable-prefix>:
+#       <destination-network>:
 #           (collection of destination IP's)
 #    }
-# - "training" split will contain 1/3rd of 'unique dest-IPs' per bgp-routable-prefix
-# - "test" split will contain 2/3rds of 'unique dest-IPs' per bgp-routable-prefix
+# - "training" split will contain 4/5ths of 'unique dest-IPs' per destination-net
+# - "test" split will contain 1/5th of 'unique dest-IPs' per destination-net
 # - In other words, "training" and "test" are guaranteed NOT to have the same
 #   destination IPs, but will still properly split measurements from the same prefix. 
 
@@ -41,7 +41,7 @@ from collections import defaultdict
 #==========================================================
 
 try:
-    configfile = open("./config.yml", 'r')
+    configfile = open("./revtr.map_and_split.config.yml", 'r')
     configurations = yaml.load(configfile)
     configfile.close()
 except (FileNotFoundError,IndexError):
@@ -153,12 +153,12 @@ def main():
                 index = 0
                 num_prefixes = num_prefixes + 1
                 for dest in dests:
-                    # ~1/3rd of data goes in the training set
-                    if index % 3 == 0:
-                        ddict[dest] = ("train", dnet)
-                    # ~2/3rds of data goes in the test set
-                    else:
+                    # ~1/5th of data goes in the testing set
+                    if index % 5 == 0:
                         ddict[dest] = ("test", dnet)
+                    # ~4/5ths of data goes in the training set
+                    else:
+                        ddict[dest] = ("train", dnet)
                     # increment the index
                     index = index + 1
 

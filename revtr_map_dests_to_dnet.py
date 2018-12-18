@@ -33,7 +33,7 @@ from bs4 import BeautifulSoup
 
 try:
     credfile = open("./credentials.yml", 'r')
-    configfile = open("./config.yml", 'r')
+    configfile = open("./revtr.map_and_split.config.yml", 'r')
     configurations = {**yaml.load(credfile), **yaml.load(configfile)}
     credfile.close()
     configfile.close()
@@ -84,66 +84,64 @@ def _numhops(ping):
             break
     return dist
 
-# _lookuptask
-# Query the BGP-dump database with IP, and store value in destinfo[] dict.
-# Additionally, append the IP's corresponding /24 CIDR prefix to the dict.
-# No locking is needed! Python's core data structures are all thread-safe
-# https://docs.python.org/3/glossary.html#term-global-interpreter-lock
-def _lookuptask(ip, destinfo):
+## _lookuptask
+## Query the BGP-dump database with IP, and store value in destinfo[] dict.
+## Additionally, append the IP's corresponding /24 CIDR prefix to the dict.
+## No locking is needed! Python's core data structures are all thread-safe
+## https://docs.python.org/3/glossary.html#term-global-interpreter-lock
+#def _lookuptask(ip, destinfo):
+#    try:
+#        s24 = '.'.join(ip.split('.')[:3]) + ".0/24"
+#        destinfo[ip] = asndb.lookup(ip) + (s24,)
+#    except:
+#        return
+#
+## _prefixinfo
+## spin off a _lookuptask(ip) thread
+## returns tuple(thread-handle, ip-address)
+#def _prefixinfo(ip, destinfo):
+#    t = threading.Thread(target=_lookuptask(ip,destinfo), name=ip+".prefixer")
+#    t.start()
+#    return (t, ip)
+
+def _prefixinfo(ip):
     try:
         s24 = '.'.join(ip.split('.')[:3]) + ".0/24"
-        destinfo[ip] = asndb.lookup(ip) + (s24,)
+        return ip, asndb.lookup(ip) + (s24,)
     except:
-        return
+        return ip, ()
 
-# _prefixinfo
-# spin off a _lookuptask(ip) thread
-# returns tuple(thread-handle, ip-address)
-def _prefixinfo(ip, destinfo):
-    t = threading.Thread(target=_lookuptask(ip,destinfo), name=ip+".prefixer")
-    t.start()
-    return (t, ip)
-
-# FilterAndCount ...
-# Remove pings from the input CSV file for which the destination is never reached
+# StreamData ...
+# Simply grabs the IP address from a ping-record, and streams it out
 # Yields ip-address
 # Adapted from StackOverflow post: https://stackoverflow.com/a/17444799/3341596
-def FilterAndCount(vp):
+def StreamData(vp):
     if not download or os.path.isfile(vpdir + '/' + vp + ".csv"):
         filename = vpdir + '/' + vp + ".csv"
     else:
         filename = cget(vp+'.csv')
     with open(filename, "r") as csvfile:
         datareader = csv.reader(csvfile)
-        # filter and count
-        yield from map(lambda ping: ping[0],
-            filter(lambda ping: _numhops(ping) <= 9, datareader))
-
-    # these files are large, don't want to keep them around!
-    # TODO: eventually uncomment and remove the files... need them now for data-splitting
-    # os.remove(filename)
+        yield from map(lambda ping: ping[0], datareader)
     return
 
 # MapPrefixes ...
-# Take filtered output and return the destination IP address; 
-# Collect corresponding prefix info in the background
-def MapPrefixes(vp,destinfo):
-    dests = FilterAndCount(vp)
+# Take streamed output and collect corresponding prefix info in the background
+# Returns the IP Address
+def MapPrefixes(vp):
+    dests = StreamData(vp)
     # the below line will yeild a 2-tuple (thread_handle, IP address)
-    yield from map(lambda dest: _prefixinfo(dest,destinfo), dests)
+    # yield from map(lambda dest: _prefixinfo(dest,destinfo), dests)
+    yield from map(lambda dest: _prefixinfo(dest), dests)
     return
 
 # GroupTask ...
-# Group the (filtered) set of destinations by the configured method
-# Note: this is the first function that forces an actual read! (doesn't "yeild")
+# Group the set of destinations by the configured method
 def GroupTask(vp):
 
     # if we've already got a pickle file containing the mappings, skip!
     if os.path.isfile(datadir + '/tmp/' + vp + ".pkl"):
         return
-
-    # destinfo holds the mapping information for each destination
-    destinfo = {}
 
     # dest_by_*
     # dictionaries to hold groupings for each grouping method
@@ -152,17 +150,10 @@ def GroupTask(vp):
     dest_by_s24 = defaultdict(set)
 
     # fill the grouping dicts
-    for entry in MapPrefixes(vp, destinfo):
-        # parse apart the returned entry
-        thread = entry[0]    # thread handle
-        dest = entry[1]      # destination ip-address
-
-        # wait for the generated (updating destinfo) thread to finish
-        thread.join()
+    for dest, dinfo in MapPrefixes(vp):
 
         # gather the output
-        if dest in destinfo:
-            dinfo = destinfo[dest]
+        if dinfo != ():
             asn = str(dinfo[0])     # ASN
             prefix = str(dinfo[1])  # BGP-routable prefix
             s24 = str(dinfo[2])     # /24 prefix
@@ -245,24 +236,18 @@ def DumpMappings():
         with open(datadir+'/tmp/'+vpkl, 'rb') as pklfile:
             # first by bgp-prefix
             for prefix, dests in pickle.load(pklfile).items():
-                # print("DumpMappings: prefix {} gets dests {}\n".format(
-                #     prefix, list(dests)))
                 if prefix in dest_by_prefix:
                     dest_by_prefix[prefix].union(dests)
                 else:
                     dest_by_prefix[prefix] = dests
             # then by asn
             for asn, dests in pickle.load(pklfile).items():
-                # print("DumpMappings: asn {} gets dests {}\n".format(
-                #     asn, list(dests)))
                 if asn in dest_by_asn:
                     dest_by_asn[asn].union(dests)
                 else:
                     dest_by_asn[asn] = dests
             # finally by /24
             for s24, dests in pickle.load(pklfile).items():
-                # print("DumpMappings: s24 {} gets dests {}\n".format(
-                #     s24, list(dests)))
                 if s24 in dest_by_s24:
                     dest_by_s24[s24].union(dests)
                 else:
