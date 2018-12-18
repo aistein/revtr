@@ -45,7 +45,7 @@ if dnet_type == 'bgp':
 if dnet_type == 'asn':
     probe_dir = os.path.join(probe_dir, 'asn')
 if dnet_type == 's24':
-    probe_dire = os.path.join(probe_dir, 's24')
+    probe_dir = os.path.join(probe_dir, 's24')
 print("Probe Directory: {}".format(probe_dir))
 
 # have the rankings been refreshed? if so, any saved pickles will need to be rewritten
@@ -58,6 +58,12 @@ print("BGP Dump File: {}".format(ipasn_file))
 
 bgpdb = None
 
+def setupdirs():
+    if not os.path.exists(os.path.join(results_dir, "tmp")):
+        os.makedirs(os.path.join(results_dir, "tmp"))
+    if not os.path.exists(os.path.join(results_dir, dnet_type, "tmp")):
+        os.makedirs(os.path.join(results_dir, dnet_type, "tmp"))
+
 def slash_24_of(ip_str):
     dots = ip_str.strip().split('.')
     dots[-1] = '0/24'
@@ -69,16 +75,11 @@ def bgp_prfx_of(ip_str):
 
 def asn_of(ip_str):
     asn, _ = bgpdb.lookup(ip_str)
-    return asn
-
-def ingr_lookup(hops, dnet, dnet_lookup):
-    ingr = None
-    for i, h in enumerate(hops):
-        if dnet_lookup(h) == dnet:
-            return h, i + 1  
-    return None, None
+    return str(asn)
 
 if __name__ == '__main__':
+
+    setupdirs()
 
     bgpdb = pyasn.pyasn(ipasn_file)
     subdir = ''
@@ -86,7 +87,7 @@ if __name__ == '__main__':
         exit('Illegal dnet type: \'{}\''.format(dnet_type))
     if dnet_type == 's24':
         dnet_lookup = slash_24_of
-        subdir = 'slash_24'
+        subdir = 's24'
     if dnet_type == 'asn':
         dnet_lookup = asn_of
         subdir = 'asn'
@@ -126,7 +127,7 @@ if __name__ == '__main__':
         with open(set_cover_pickle, 'rb') as scpkl:
             set_cover_rankings = pickle.load(scpkl)
     else:
-        with open(os.path.join(rankings_dir, "set_cover", "set_cover_results.csv"), 'r') as f:
+        with open(os.path.join(rankings_dir, "set_cover_rankings.csv"), 'r') as f:
             datareader = csv.reader(f)
             next(datareader)
             for i, line in enumerate(csv.reader(f)):
@@ -160,7 +161,7 @@ if __name__ == '__main__':
 
     # setify destination cover rankings
     dst_rankings_by_dnet = {}
-    destination_cover_pickle = os.path.join(results_dir, "tmp", "destination_cover_rankings.pkl")
+    destination_cover_pickle = os.path.join(results_dir, dnet_type, "tmp", "destination_cover_rankings.pkl")
     if os.path.isfile(destination_cover_pickle) and not refresh:
         with open(destination_cover_pickle, 'rb') as dcpkl:
             dst_rankings_by_dnet = pickle.load(dcpkl)
@@ -201,11 +202,8 @@ if __name__ == '__main__':
                         sys.stdout.write('{},{},{},'.format(vp, dists[vp], i + 1))
                         found = True
                         break
-                if not found:
-                    sys.stdout.write(',,,')
-            else:
+            if not found:
                 sys.stdout.write(',,,')
-                bad += 1
 
             found = False
             if dnet in dst_rankings_by_dnet:
@@ -214,9 +212,7 @@ if __name__ == '__main__':
                         sys.stdout.write('{},{},{}'.format(vp, dists[vp], i + 1))
                         found = True
                         break
-                if not found:
-                    sys.stdout.write(',,,')
-            else :
-                bad +=1
+            if not found:
                 sys.stdout.write(',,,')
+
             sys.stdout.write('\n')

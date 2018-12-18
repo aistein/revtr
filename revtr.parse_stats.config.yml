@@ -1,3 +1,2 @@
-results_dir: /home/ubuntu/data/results_final
-output_dir: /home/ubuntu/data/results_parsing
-dnet_type: bgp
+stats_dir: /home/ubuntu/data/12_17_2018/calc_algo_results
+output_dir: /home/ubuntu/data/12_17_2018/parsing_results
