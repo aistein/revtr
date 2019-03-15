@@ -1,4 +1,5 @@
 #! /usr/local/bin/python3
+import os
 import sys
 import pickle
 import json
@@ -101,24 +102,25 @@ if __name__ == '__main__':
 
     dists_by_vp_by_ingr_by_dnet = None
 
-    if len(sys.argv) < 3:
-        exit('Usage aggreage_ingresses <dnet> <dest-by-ingress-by-dnet json file>')
+    if len(sys.argv) < 4:
+        exit('Usage ./aggreatge_ingresses_and_rank_single_dnet <dnet> <dest-by-ingress-by-dnet json file> <output-dir>')
 
     target_dnet = sys.argv[1]
 
     with open(sys.argv[2], 'r') as f:
         dists_by_vp_by_ingr_by_dnet = json.loads(f.read())
 
+    output_dir = sys.argv[3]
+    ingr_ips_file = "logical_ingr_ips-{}".format(target_dnet)
+    ingr_vps_file = "logical_ingr_vps-{}".format(target_dnet)
+
     vps_by_ingrt_by_dnet = {}
-    #with open(sys.argv[3], 'w+') as f:
-    #    vps_by_ingrt = aggregate_ingresses(dists_by_vp_by_ingr_by_dnet[target_dnet])
-    #    print(vps_by_ingrt)
-    #    ranked_vps = [vps[0] for vps in vps_by_ingrt.values()]
-    #    f.write("{},{}\n".format(target_dnet, ','.join(ranked_vps)))
     vps_by_ingrt = aggregate_ingresses(dists_by_vp_by_ingr_by_dnet[target_dnet])
-    #print(vps_by_ingrt)
-    #ranked_vps = [vps[0] for vps in vps_by_ingrt.values()]
-    #print("{},{}\n".format(target_dnet, ','.join(ranked_vps)))
     print("target dnet: {}".format(target_dnet))
-    for vps in vps_by_ingrt.values():
-        print("min_vp_group: {}".format(",".join(vps)))
+    with open(os.path.join(output_dir,ingr_ips_file), 'w') as ipf, open(os.path.join(output_dir,ingr_vps_file), 'w') as vpf:
+        for i, (ips, vps) in enumerate(vps_by_ingrt.items()):
+            vpf.write("min_vp_group: {}\n".format(",".join(vps)))
+            print("min_vp_group: {}".format(",".join(vps)))
+            ipf.write("logical-ingress-{},".format(i))
+            [ipf.write("{},".format(ip)) for ip in ips]
+            ipf.write("\n")

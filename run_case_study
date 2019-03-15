@@ -31,17 +31,36 @@ training_dir="$datadir/train/vp_measurements_annotated"
 
 dists_by_ingr_by_dnet_dir="$datadir/rankings/ingress_cover"
 
-"$scripts"/aggregate_ingresses_and_rank_single_dnet.py "$asn" "$dists_by_ingr_by_dnet_dir"/asn/vp_dists_by_ingr_by_dnet.json &> "$output_dir"/ingr_cover_asn.out & pids+=("$!")
-"$scripts"/aggregate_ingresses_and_rank_single_dnet.py "$bgp" "$dists_by_ingr_by_dnet_dir"/bgp/vp_dists_by_ingr_by_dnet.json &> "$output_dir"/ingr_cover_bgp.out & pids+=("$!")
-"$scripts"/aggregate_ingresses_and_rank_single_dnet.py "$s24" "$dists_by_ingr_by_dnet_dir"/s24/vp_dists_by_ingr_by_dnet.json &> "$output_dir"/ingr_cover_s24.out & pids+=("$!")
+"$scripts"/aggregate_ingresses_and_rank_single_dnet.py "$asn" "$dists_by_ingr_by_dnet_dir"/asn/vp_dists_by_ingr_by_dnet.json "$output_dir" &> "$output_dir"/ingr_cover_asn.out & pids+=("$!")
+"$scripts"/aggregate_ingresses_and_rank_single_dnet.py "$bgp" "$dists_by_ingr_by_dnet_dir"/bgp/vp_dists_by_ingr_by_dnet.json "$output_dir" &> "$output_dir"/ingr_cover_bgp.out & pids+=("$!")
+"$scripts"/aggregate_ingresses_and_rank_single_dnet.py "$s24" "$dists_by_ingr_by_dnet_dir"/s24/vp_dists_by_ingr_by_dnet.json "$output_dir" &> "$output_dir"/ingr_cover_s24.out & pids+=("$!")
 
 cp "$datadir"/rankings/set_cover_rankings.csv "$output_dir"
 
 # Step 3) gather test measurements to the target destination
 
-grep "$dest" "$training_dir"/asn/* &> "$output_dir"/test_measurements-asn & pids+=("$!")
-grep "$dest" "$training_dir"/bgp/* &> "$output_dir"/test_measurements-bgp & pids+=("$!")
-grep "$dest" "$training_dir"/s24/* &> "$output_dir"/test_measurements-s24 & pids+=("$!")
+testing_dir="$datadir/test/vp_measurements_annotated"
+grep "$dest" "$testing_dir"/asn/* &> "$output_dir"/test_measurements-asn & pids+=("$!")
+grep "$dest" "$testing_dir"/bgp/* &> "$output_dir"/test_measurements-bgp & pids+=("$!")
+grep "$dest" "$testing_dir"/s24/* &> "$output_dir"/test_measurements-s24 & pids+=("$!")
+
+# Step 4) identify vps that were < 9 hops from the dest
+
+"$scripts"/vps_in_dest_range.py "$dest" "$output_dir"/test_measurements-asn | sort -n &> "$output_dir"/best_vps-asn & pids+=("$!")
+"$scripts"/vps_in_dest_range.py "$dest" "$output_dir"/test_measurements-bgp | sort -n &> "$output_dir"/best_vps-bgp & pids+=("$!")
+"$scripts"/vps_in_dest_range.py "$dest" "$output_dir"/test_measurements-s24 | sort -n &> "$output_dir"/best_vps-s24 & pids+=("$!")
+
+# Step 5) see if best vps traversed same logical ingresses from rankings in both training (to dest) and testing (to dnet) data
+
+"$scripts"/grade_ingress_ranking.py "$dest" "$asn" "$output_dir"/logical_ingr_ips-"$asn" "$output_dir"/best_vps-asn &> "$output_dir"/ingress_grades-asn & pids+=("$!")
+"$scripts"/grade_ingress_ranking.py "$dest" "$bgp" "$output_dir"/logical_ingr_ips-"$bgp" "$output_dir"/best_vps-bgp &> "$output_dir"/ingress_grades-bgp & pids+=("$!")
+"$scripts"/grade_ingress_ranking.py "$dest" "$s24" "$output_dir"/logical_ingr_ips-"$s24" "$output_dir"/best_vps-s24 &> "$output_dir"/ingress_grades-s24 & pids+=("$!")
+
+
+
+
+
+
 
 echo "waiting for jobs to complete..."
 for pid in "${pids[@]}"; do
