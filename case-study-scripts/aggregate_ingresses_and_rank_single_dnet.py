@@ -55,10 +55,10 @@ def aggregate_ingresses(dists_by_vp_by_ingr, overlap_threshold=0.75):
                 del sorted_ingrs[vp]
             start = len(vps_this_round) # starting index for next round
 
-        # note : this is where ranking (sorting) happens by distance (within a logical ingress)
-        # note : "distance" from some VP to a logical ingress is actually min-dist of all measurements from
-        #          ... that VP to the logical ingress
-        # TODO: consier using "mean of all measurements" instead of "min of all measurements"
+        ## note : this is where ranking (sorting) happens by distance (within a logical ingress)
+        ## note : "distance" from some VP to a logical ingress is actually min-dist of all measurements from
+        ##          ... that VP to the logical ingress
+        ## TODO: consier using "mean of all measurements" instead of "min of all measurements"
         #vps_by_ingrt[tuple(agg_ingrs)] =\
         #        sorted(vps_this_round, key=lambda x : 
         #        min([min(dists_by_vp_by_ingr[ingr][x])\
@@ -80,6 +80,21 @@ def aggregate_ingresses(dists_by_vp_by_ingr, overlap_threshold=0.75):
 
         vps_by_ingrt[tuple(agg_ingrs)] = min_group(dist_sorted_vps_this_round)
 
+        # below for debugging only
+        logical_ingr_uid = hash(tuple(agg_ingrs))
+        print("UID of logical ingress: {}".format(logical_ingr_uid))
+        print("VPs this round sorted by distance...")
+        for vp in dist_sorted_vps_this_round:
+            print("\tVP: {}".format(vp))
+            min_dist_to_logical_ingr = float('inf')
+            nmeas_to_logical_ingr = 0
+            for ingr in agg_ingrs:
+                if vp in dists_by_vp_by_ingr[ingr]:
+                    nmeas_to_logical_ingr += 1
+                    min_dist_to_logical_ingr = min( min_dist_to_logical_ingr, min( dists_by_vp_by_ingr[ingr][vp] ) )
+            print("\t\t# Measurements into l-ingr {} = {}".format( logical_ingr_uid, nmeas_to_logical_ingr ))
+            print("\t\tMinimum Distance to l-ingr {} = {}".format( logical_ingr_uid, min_dist_to_logical_ingr))
+
     return vps_by_ingrt
 
 if __name__ == '__main__':
@@ -87,19 +102,23 @@ if __name__ == '__main__':
     dists_by_vp_by_ingr_by_dnet = None
 
     if len(sys.argv) < 3:
-        exit('Usage aggreage_ingresses <input_file> <output_file>')
+        exit('Usage aggreage_ingresses <dnet> <dest-by-ingress-by-dnet json file>')
 
-    with open(sys.argv[1], 'r') as f:
+    target_dnet = sys.argv[1]
+
+    with open(sys.argv[2], 'r') as f:
         dists_by_vp_by_ingr_by_dnet = json.loads(f.read())
 
     vps_by_ingrt_by_dnet = {}
-    with open(sys.argv[2], 'w+') as f:
-        for dnet in dists_by_vp_by_ingr_by_dnet:
-            vps_by_ingrt = aggregate_ingresses(dists_by_vp_by_ingr_by_dnet[dnet])
-            vps_by_ingrt_by_dnet[dnet] = vps_by_ingrt
-            #ranked_vps = [vps[0] for vps in vps_by_ingrt.values()]
-            ranked_vps = [','.join(vps) for vps in vps_by_ingrt.values()]
-            f.write("{},{}\n".format(dnet, ','.join(ranked_vps)))
-
-    #with open(sys.argv[2], 'wb+') as f:
-    #    pickle.dump(vps_by_ingrt_by_dnet, f)
+    #with open(sys.argv[3], 'w+') as f:
+    #    vps_by_ingrt = aggregate_ingresses(dists_by_vp_by_ingr_by_dnet[target_dnet])
+    #    print(vps_by_ingrt)
+    #    ranked_vps = [vps[0] for vps in vps_by_ingrt.values()]
+    #    f.write("{},{}\n".format(target_dnet, ','.join(ranked_vps)))
+    vps_by_ingrt = aggregate_ingresses(dists_by_vp_by_ingr_by_dnet[target_dnet])
+    #print(vps_by_ingrt)
+    #ranked_vps = [vps[0] for vps in vps_by_ingrt.values()]
+    #print("{},{}\n".format(target_dnet, ','.join(ranked_vps)))
+    print("target dnet: {}".format(target_dnet))
+    for vps in vps_by_ingrt.values():
+        print("min_vp_group: {}".format(",".join(vps)))

@@ -13,7 +13,7 @@ from collections import defaultdict
 #==========================================================
 
 try:
-    configfile = open("./revtr.parse_stats.config.yml", 'r')
+    configfile = open("./configurations/revtr.parse_stats.config.yml", 'r')
     configurations = yaml.load(configfile)
     configfile.close()
 except (FileNotFoundError,IndexError):
@@ -24,9 +24,6 @@ output_dir = configurations['output_dir']
 
 # results directory & filename
 stats_dir = configurations['stats_dir']
-
-# type of dnet plot to make
-plot_type = configurations['plot_type']
 
 #==========================================================
 # Functions
@@ -79,7 +76,7 @@ def main():
     print("[     | opt # reach |  sc # reach  |  dc # reach  |  ic # reach  | M(sc-opt) | M(dc-opt) | M(ic-opt) ]")
     print("[=====|=============|==============|==============|==============|===========|===========|===========]")
 
-    stacked_bar_graph_stats = np.zeros(shape=(3,4,11), dtype=int)
+    multi_bar_graph_stats = np.zeros(shape=(3,4,11), dtype=int)
 
     for type_index, dnet_type in enumerate(('bgp', 'asn', 's24')):
 
@@ -100,7 +97,7 @@ def main():
             # opt stats
             n_opt += 1
             op_in_range += 1
-            stacked_bar_graph_stats[type_index][0][entry['opt_dist']] += 1
+            multi_bar_graph_stats[type_index][0][entry['opt_dist']] += 1
             # set-cover stats
             if entry['set_pings'] > -1:
                 n_scp += 1
@@ -109,9 +106,9 @@ def main():
                 n_sc += 1
                 sc_in_range += 1
                 sc_cum_delta += entry['set_dist'] - entry['opt_dist'] 
-                stacked_bar_graph_stats[type_index][1][entry['set_dist']] += 1
+                multi_bar_graph_stats[type_index][1][entry['set_dist']] += 1
             else:
-                stacked_bar_graph_stats[type_index][1][-1] += 1
+                multi_bar_graph_stats[type_index][1][-1] += 1
             # destination-cover stats
             if entry['dest_pings'] > -1:
                 n_dcp += 1
@@ -120,9 +117,9 @@ def main():
                 n_dc += 1
                 dc_in_range += 1
                 dc_cum_delta += entry['dest_dist'] - entry['opt_dist'] 
-                stacked_bar_graph_stats[type_index][2][entry['dest_dist']] += 1
+                multi_bar_graph_stats[type_index][2][entry['dest_dist']] += 1
             else:
-                stacked_bar_graph_stats[type_index][2][-1] += 1
+                multi_bar_graph_stats[type_index][2][-1] += 1
             # ingress-cover stats
             if entry['ingr_pings'] > -1:
                 n_icp += 1
@@ -131,9 +128,9 @@ def main():
                 n_ic += 1
                 ic_in_range += 1
                 ic_cum_delta += entry['ingr_dist'] - entry['opt_dist'] 
-                stacked_bar_graph_stats[type_index][3][entry['ingr_dist']] += 1
+                multi_bar_graph_stats[type_index][3][entry['ingr_dist']] += 1
             else:
-                stacked_bar_graph_stats[type_index][3][-1] += 1
+                multi_bar_graph_stats[type_index][3][-1] += 1
         
         sc_avg_delta, dc_avg_delta, ic_avg_delta = -1, -1, -1
         if n_sc > 0:
@@ -164,28 +161,19 @@ def main():
     # stacked bar plot
     ind = np.arange(1,11)
     width = 0.15
-    if plot_type == 'bgp':
-        opt = plt.bar(ind-3*width/2, stacked_bar_graph_stats[0][0][1:11], width=width, color='r', align='center')
-        ingr = plt.bar(ind-width/2, stacked_bar_graph_stats[0][3][1:11], width=width, color='y', align='center')
-        topk = plt.bar(ind+width/2, stacked_bar_graph_stats[0][1][1:11], width=width, color='g', align='center')
-        dest = plt.bar(ind+3*width/2, stacked_bar_graph_stats[0][2][1:11], width=width, color='b', align='center')
-    if plot_type == 'asn':
-        opt = plt.bar(ind-3*width/2, stacked_bar_graph_stats[1][0][1:11], width=width, color='r', align='center')
-        ingr = plt.bar(ind-width/2, stacked_bar_graph_stats[1][3][1:11], width=width, color='y', align='center')
-        topk = plt.bar(ind+width/2, stacked_bar_graph_stats[1][1][1:11], width=width, color='g', align='center')
-        dest = plt.bar(ind+3*width/2, stacked_bar_graph_stats[1][2][1:11], width=width, color='b', align='center')
-    if plot_type == 's24':
-        opt = plt.bar(ind-3*width/2, stacked_bar_graph_stats[2][0][1:11], width=width, color='r', align='center')
-        ingr = plt.bar(ind-width/2, stacked_bar_graph_stats[2][3][1:11], width=width, color='y', align='center')
-        topk = plt.bar(ind+width/2, stacked_bar_graph_stats[2][1][1:11], width=width, color='g', align='center')
-        dest = plt.bar(ind+3*width/2, stacked_bar_graph_stats[2][2][1:11], width=width, color='b', align='center')
-    plt.ylabel('# Destinations RR-Reachable')
-    plt.xlabel('# Hops')
-    plt.title('Ranked VP Distance from Destination ('+plot_type+')')
-    plt.xticks(ind, ('1','2','3','4','5','6','7','8','9','>9'))
-    plt.yticks(np.arange(0,60000,10000))
-    plt.legend((opt, topk, dest, ingr), ('Optimal VP', 'Top K', 'Destination Cover', 'Ingress Cover'))
-    plt.savefig('ranked_vp_distance_from_destination-'+plot_type+'.png')
+    for type_index, plot_type in enumerate(('bgp', 'asn', 's24')):
+        opt = plt.bar(ind-3*width/2, multi_bar_graph_stats[type_index][0][1:11], width=width, color='r', align='center')
+        ingr = plt.bar(ind-width/2, multi_bar_graph_stats[type_index][3][1:11], width=width, color='y', align='center')
+        topk = plt.bar(ind+width/2, multi_bar_graph_stats[type_index][1][1:11], width=width, color='g', align='center')
+        dest = plt.bar(ind+3*width/2, multi_bar_graph_stats[type_index][2][1:11], width=width, color='b', align='center')
+        plt.ylabel('# Destinations RR-Reachable')
+        plt.xlabel('# Hops')
+        plt.title('Ranked VP Distance from Destination ('+plot_type+')')
+        plt.xticks(ind, ('1','2','3','4','5','6','7','8','9','>9'))
+        plt.yticks(np.arange(0,60000,10000))
+        plt.legend((opt, topk, dest, ingr), ('Optimal VP', 'Top K', 'Destination Cover', 'Ingress Cover'))
+        plt.savefig('ranked_vp_distance_from_destination-'+plot_type+'.png')
+        plt.clf()
         
 
 if __name__ == "__main__":

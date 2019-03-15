@@ -1,7 +1,0 @@
-results_dir: /home/ubuntu/data/12_17_2018/calc_algo_results
-rankings_dir: /home/ubuntu/data/12_17_2018/results
-probe_dir: /home/ubuntu/data/12_17_2018/test/vp_measurements
-K: 10
-dnet_type: asn
-ipasn_file: /home/ubuntu/data/bgpdumps/2018-12-03.dat
-refresh: false

@@ -1,4 +1,7 @@
+__pycache__/
 logs/
 data/
-credentials.yml
+bgpdumps/
+results/
+pipeline/configurations/credentials.yml
 *.log
