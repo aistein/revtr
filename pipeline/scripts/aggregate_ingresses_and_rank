@@ -1,0 +1,89 @@
+#! /usr/bin/python3
+import sys
+import pickle
+import json
+from collections import OrderedDict, defaultdict
+
+def aggregate_ingresses(dists_by_vp_by_ingr, overlap_threshold=0.75):
+    """
+    aggregate dnet ingresses sets whose intersections are above overlap threshold.
+
+    The idea here is that, if two sets of ingress ips have sufficiently high overlap, we
+    can consider them the same ingress set.
+
+    Returns dictionary with the following kv pairs:
+        keys: tuple of vps that use same aggregated ingress set
+        vals: said aggregated ingress set
+    """
+
+    # construct set of all dnet ingress ips for each vp
+    ingrs_by_vp = defaultdict(set)
+    for ingr, dists_by_vp in dists_by_vp_by_ingr.items():
+        for vp in dists_by_vp.keys():
+            ingrs_by_vp[vp].add(ingr)
+
+    # sort ingress sets by size (large -> small)
+    sorted_ingrs = OrderedDict((sorted(ingrs_by_vp.items(),
+            key=lambda x : -len(x[1]))))
+
+    # aggregate ingresses using overlap threshold
+    vps_by_ingrt = {} # aggregated ingresses by vp tuples
+    while len(sorted_ingrs) > 0:
+
+        # pop the largest (vp, ingress set) pair still remaining
+        vp, agg_ingrs = sorted_ingrs.popitem(last=False)
+
+        # compare aggregated ingress set, A, to every other ingress set S.
+        # If the intersection of A and S is at least overlap_threshold of S, then combine
+        # the two into a new aggregate.  Continue until no new sets are added to aggregate.
+        # Note that, since ingresses are sorted, A will always be larger than S
+        vps_this_round = [vp]
+        ingrs_added = True
+        start = 1
+        while ingrs_added:
+            ingrs_added = False
+            for vp, ingrs in sorted_ingrs.items():
+
+                # overlap threshold exceeded
+                if len(ingrs & agg_ingrs) >= overlap_threshold * len(ingrs):
+                    vps_this_round.append(vp)
+                    agg_ingrs |= ingrs
+                    ingrs_added = True
+
+            # remove aggregated ingresses from sorted list
+            for vp in vps_this_round[start:]:
+                del sorted_ingrs[vp]
+            start = len(vps_this_round) # starting index for next round
+
+        # note : this is where ranking (sorting) happens by distance (within a logical ingress)
+        # note : "distance" from some VP to a logical ingress is actually min-dist of all measurements from
+        #          ... that VP to the logical ingress
+        # TODO: consier using "mean of all measurements" instead of "min of all measurements"
+        vps_by_ingrt[tuple(agg_ingrs)] =\
+                sorted(vps_this_round, key=lambda x : 
+                min([min(dists_by_vp_by_ingr[ingr][x])\
+                if x in dists_by_vp_by_ingr[ingr] else 10
+                for ingr in agg_ingrs]))
+
+    return vps_by_ingrt
+
+if __name__ == '__main__':
+
+    dists_by_vp_by_ingr_by_dnet = None
+
+    if len(sys.argv) < 3:
+        exit('Usage aggreage_ingresses <input_file> <output_file>')
+
+    with open(sys.argv[1], 'r') as f:
+        dists_by_vp_by_ingr_by_dnet = json.loads(f.read())
+
+    vps_by_ingrt_by_dnet = {}
+    with open(sys.argv[2], 'w+') as f:
+        for dnet in dists_by_vp_by_ingr_by_dnet:
+            vps_by_ingrt = aggregate_ingresses(dists_by_vp_by_ingr_by_dnet[dnet])
+            vps_by_ingrt_by_dnet[dnet] = vps_by_ingrt
+            ranked_vps = [vps[0] for vps in vps_by_ingrt.values()]
+            f.write("{},{}\n".format(dnet, ','.join(ranked_vps)))
+
+    #with open(sys.argv[2], 'wb+') as f:
+    #    pickle.dump(vps_by_ingrt_by_dnet, f)

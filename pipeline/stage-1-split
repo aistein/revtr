@@ -1,9 +1,9 @@
 #!/usr/local/bin/python3
 
-# revtr_split_data.py
+# stage-1-split.py
 # -------------------
 # usage:
-# - ./revtr_split_data.py
+# - ./stage-1-split.py
 #
 # function:
 # - create the following file hierarchy for test and training data
@@ -25,7 +25,7 @@
 # - "training" split will contain 4/5ths of 'unique dest-IPs' per destination-net
 # - "test" split will contain 1/5th of 'unique dest-IPs' per destination-net
 # - In other words, "training" and "test" are guaranteed NOT to have the same
-#   destination IPs, but will still properly split measurements from the same prefix. 
+#   destination IPs, but will still properly split measurements from the same dnet. 
 
 import sys
 import os

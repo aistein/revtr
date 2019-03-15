@@ -1,12 +1,12 @@
 #!/usr/local/bin/python3
 
-# revtr_map_dests_to_dnet.py
+# stage-0-parse.py
 # - parse all VP CSV files, one-by-one from the online source
 # - filter out paths > 9 hops
-# - write out a JSON file that maps each destination to its BGP-prefix
+# - write out a JSON file that maps each destination to its destination network (prefix or asn)
 # - PURPOSE: the above file will be used to split data into test and training sets
 # usage:
-# - ./revtr_map_dests_to_dnet.py
+# - ./stage-0-parse.py
 # note:
 # - be sure to update the BGP datadump before running this script
 # - to do so, run ./scripts/refresh
@@ -84,26 +84,9 @@ def _numhops(ping):
             break
     return dist
 
-## _lookuptask
-## Query the BGP-dump database with IP, and store value in destinfo[] dict.
-## Additionally, append the IP's corresponding /24 CIDR prefix to the dict.
-## No locking is needed! Python's core data structures are all thread-safe
-## https://docs.python.org/3/glossary.html#term-global-interpreter-lock
-#def _lookuptask(ip, destinfo):
-#    try:
-#        s24 = '.'.join(ip.split('.')[:3]) + ".0/24"
-#        destinfo[ip] = asndb.lookup(ip) + (s24,)
-#    except:
-#        return
-#
-## _prefixinfo
-## spin off a _lookuptask(ip) thread
-## returns tuple(thread-handle, ip-address)
-#def _prefixinfo(ip, destinfo):
-#    t = threading.Thread(target=_lookuptask(ip,destinfo), name=ip+".prefixer")
-#    t.start()
-#    return (t, ip)
-
+# _prefixinfo
+# Look up the given IP address in ASN database
+# returns tuple(ip-address,)
 def _prefixinfo(ip):
     try:
         s24 = '.'.join(ip.split('.')[:3]) + ".0/24"

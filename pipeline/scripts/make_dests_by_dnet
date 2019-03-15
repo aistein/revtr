@@ -1,0 +1,27 @@
+#! /usr/bin/python3
+
+import os
+import sys
+import csv
+import pickle
+from collections import defaultdict
+
+if len(sys.argv) < 3:
+    exit('Usage: make_dests_by_dnet <probe_dir> <output_file>')
+
+probe_dir = sys.argv[1]
+output_file = sys.argv[2]
+
+dests_by_dnet = defaultdict(set)
+for fname in os.listdir(probe_dir):
+    print('processing {}'.format(fname))
+    with open(os.path.join(probe_dir, fname), 'r') as f:
+        for row in csv.reader(f):
+            dnet = row[0]
+            dest = row[1]
+            hops = row[2:]
+            if dest in hops:
+                dests_by_dnet[dnet].add(dest)
+
+with open(output_file, 'wb+') as f:
+    pickle.dump(dict(dests_by_dnet), f)
