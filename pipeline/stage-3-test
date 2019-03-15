@@ -1,0 +1,11 @@
+#! /bin/sh
+
+# annotate probes with 3 entries at front: <DNET>, <DETS>, <DIST>, ...
+./scripts/annotate_probes <original_probe_dir>/s24 <target_dir_for_annotated_probes>/s24
+./scripts/annotate_probes <original_probe_dir>/asn <target_dir_for_annotated_probes>/asn
+./scripts/annotate_probes <original_probe_dir>/prefix <target_dir_for_annotated_probes>/bgp
+
+# run emulation for each DNET definition
+./scripts/calc_algo_stats <annotated_test_dir> <rankings_dir> <K> s24 <opt: ipasn_file>
+./scripts/calc_algo_stats <annotated_test_dir> <rankings_dir> <K> asn <opt: ipasn_file>
+./scripts/calc_algo_stats <annotated_test_dir> <rankings_dir> <K> bgp <opt: ipasn_file>

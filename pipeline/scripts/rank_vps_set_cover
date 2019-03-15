@@ -1,0 +1,43 @@
+#! /usr/bin/python3
+
+import sys
+import csv
+import os
+from collections import defaultdict
+
+if len(sys.argv) < 2:
+    exit("Usage: rank_vps_set_cover <rr_probe_dir>")
+
+rr_probe_dir = os.path.abspath(sys.argv[1])
+
+uncovered_reachables = set()
+reachables_by_vp = defaultdict(set)
+for vp_csv in os.listdir(rr_probe_dir):
+    vp_name = vp_csv.replace('.csv', '')
+    with open(os.path.join(rr_probe_dir, vp_csv), 'r') as f:
+        for row in csv.reader(f):
+            d = row[0]
+            if d in row[1:]:
+                reachables_by_vp[vp_name].add(d)
+                uncovered_reachables.add(d)
+
+print("#VP Chosen\tNumber Reachable Destinations Covered\tFraction of Reachable Destinations Covered\tCumulative Fraction of Reachable Destinations Covered")
+frac = 0.0
+cumfrac = 0.0
+num_covered = 1
+tot = len(uncovered_reachables)
+while len(uncovered_reachables) > 0 and num_covered > 0 and\
+        len(reachables_by_vp) > 0:
+    num_covered = 0
+    max_covered = 0
+    chosen_vp = ""
+    for vp, dsts in reachables_by_vp.items():
+        num_covered = len(uncovered_reachables & dsts)
+        if num_covered > max_covered:
+            chosen_vp = vp
+            max_covered = num_covered
+    uncovered_reachables -= reachables_by_vp[chosen_vp]
+    frac = float(max_covered)/tot
+    cumfrac += frac
+    del reachables_by_vp[chosen_vp]
+    print("%s\t%d\t%f\t%f" % (chosen_vp, max_covered, frac, cumfrac))

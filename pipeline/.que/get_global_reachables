@@ -1,0 +1,16 @@
+#! /usr/bin/python3
+
+import os
+import sys
+import csv
+
+input_dir = sys.argv[1]
+
+dests = set()
+for vp_csv in os.listdir(input_dir):
+    with open(os.path.join(input_dir, vp_csv), 'r') as f:
+        for row in csv.reader(f):
+            d = row[0]
+            if d not in dests and d in row[1:]:
+                print(d)
+                dests.add(d)

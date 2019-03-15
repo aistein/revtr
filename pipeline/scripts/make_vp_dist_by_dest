@@ -1,0 +1,25 @@
+#! /usr/bin/python3
+
+import os
+import sys
+from collections import defaultdict
+import json
+import csv
+import pickle
+
+probe_dir = sys.argv[1]
+
+vp_dist_by_dest = defaultdict(list)
+for csv_name in os.listdir(probe_dir):
+    vp = csv_name.replace('.csv', '')
+    
+    with open(os.path.join(probe_dir, csv_name), 'r') as f:
+        for row in csv.reader(f):
+            dnet = row[0]
+            dest = row[1]
+            hops = row[2:]
+            dist = hops.index(dest) + 1 if dest in hops else -1
+
+            vp_dist_by_dest[dest].append((vp, dist))
+
+print(json.dumps(vp_dist_by_dest))
