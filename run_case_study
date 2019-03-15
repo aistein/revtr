@@ -1,0 +1,49 @@
+#!/bin/bash
+
+dest=$1
+
+scripts="./case-study-scripts"
+asn=$("$scripts"/lookup_dnet.py "$dest" asn ./bgpdumps/ipasn20181203.dat)
+bgp=$("$scripts"/lookup_dnet.py "$dest" bgp ./bgpdumps/ipasn20181203.dat)
+s24=$("$scripts"/lookup_dnet.py "$dest" s24 ./bgpdumps/ipasn20181203.dat)
+
+output_dir="./logs/automated_case_studies/cs_${dest}"
+if [ ! -d "$output_dir" ]; then
+    mkdir -p "$output_dir"
+fi
+
+# Step 1) parse 'calc_algo_stats' results for this destination
+
+latest_results="./results/results_3_9_2019"
+grep "$dest" "$latest_results"/asn_res.csv &> "$output_dir"/calc_algo_stats.out & pids+=("$!")
+grep "$dest" "$latest_results"/bgp_res.csv &>> "$output_dir"/calc_algo_stats.out & pids+=("$!")
+grep "$dest" "$latest_results"/bgp_res.csv &>> "$output_dir"/calc_algo_stats.out & pids+=("$!")
+
+# Step 2) run the 3 ranking algorithms
+
+datadir="./data/12_17_2018"
+dests_by_dnet_dir="$datadir/rankings/destination_cover"
+training_dir="$datadir/train/vp_measurements_annotated"
+
+"$scripts"/rank_vps_destination_cover_single_dnet.py "$asn" "$dests_by_dnet_dir"/asn/dests_by_dnet.pickle "$training_dir"/asn &> "$output_dir"/dest_cover_asn.out & pids+=("$!")
+"$scripts"/rank_vps_destination_cover_single_dnet.py "$bgp" "$dests_by_dnet_dir"/bgp/dests_by_dnet.pickle "$training_dir"/bgp &> "$output_dir"/dest_cover_bgp.out & pids+=("$!")
+"$scripts"/rank_vps_destination_cover_single_dnet.py "$s24" "$dests_by_dnet_dir"/s24/dests_by_dnet.pickle "$training_dir"/s24 &> "$output_dir"/dest_cover_s24.out & pids+=("$!")
+
+dists_by_ingr_by_dnet_dir="$datadir/rankings/ingress_cover"
+
+"$scripts"/aggregate_ingresses_and_rank_single_dnet.py "$asn" "$dists_by_ingr_by_dnet_dir"/asn/vp_dists_by_ingr_by_dnet.json &> "$output_dir"/ingr_cover_asn.out & pids+=("$!")
+"$scripts"/aggregate_ingresses_and_rank_single_dnet.py "$bgp" "$dists_by_ingr_by_dnet_dir"/bgp/vp_dists_by_ingr_by_dnet.json &> "$output_dir"/ingr_cover_bgp.out & pids+=("$!")
+"$scripts"/aggregate_ingresses_and_rank_single_dnet.py "$s24" "$dists_by_ingr_by_dnet_dir"/s24/vp_dists_by_ingr_by_dnet.json &> "$output_dir"/ingr_cover_s24.out & pids+=("$!")
+
+cp "$datadir"/rankings/set_cover_rankings.csv "$output_dir"
+
+# Step 3) gather test measurements to the target destination
+
+grep "$dest" "$training_dir"/asn/* &> "$output_dir"/test_measurements-asn & pids+=("$!")
+grep "$dest" "$training_dir"/bgp/* &> "$output_dir"/test_measurements-bgp & pids+=("$!")
+grep "$dest" "$training_dir"/s24/* &> "$output_dir"/test_measurements-s24 & pids+=("$!")
+
+echo "waiting for jobs to complete..."
+for pid in "${pids[@]}"; do
+    wait $pid
+done

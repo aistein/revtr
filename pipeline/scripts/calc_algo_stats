@@ -123,8 +123,8 @@ if __name__ == '__main__':
                     found = True
                     break
             if not found:
-                sys.stdout.write(',,{},'.format(len(dst_rankings_by_dnet[dnet])))
+                sys.stdout.write(',,{}'.format(len(dst_rankings_by_dnet[dnet])))
         #if not found:
         else:
-            sys.stdout.write(',,,')
+            sys.stdout.write(',,')
         sys.stdout.write('\n')

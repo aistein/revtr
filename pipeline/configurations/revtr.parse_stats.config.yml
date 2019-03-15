@@ -1,3 +1,2 @@
-stats_dir: /home/ubuntu/data/12_21_2018/calc_algo_results
-output_dir: /home/ubuntu/data/12_21_2018/parsing_results
-plot_type: s24
+stats_dir: /home/ubuntu/elen9002/results_naive_3_11_2019
+output_dir: /home/ubuntu/elen9002/results_naive_3_11_2019/parsing

@@ -69,16 +69,7 @@ def aggregate_ingresses(dists_by_vp_by_ingr, overlap_threshold=0.75):
                     if x in dists_by_vp_by_ingr[ingr]\
                     else 10 for ingr in agg_ingrs ] )
         dist_sorted_vps_this_round = sorted(vps_this_round, key=by_dist)
-
-        def min_group(sorted_vps):
-            min_group = [] 
-            min_dist = by_dist( sorted_vps[0] )
-            for vp in sorted_vps: 
-                if by_dist( vp ) == min_dist: 
-                    min_group.append(vp) 
-            return min_group 
-
-        vps_by_ingrt[tuple(agg_ingrs)] = min_group(dist_sorted_vps_this_round)
+        vps_by_ingrt[tuple(agg_ingrs)] = dist_sorted_vps_this_round
 
     return vps_by_ingrt
 
@@ -97,8 +88,7 @@ if __name__ == '__main__':
         for dnet in dists_by_vp_by_ingr_by_dnet:
             vps_by_ingrt = aggregate_ingresses(dists_by_vp_by_ingr_by_dnet[dnet])
             vps_by_ingrt_by_dnet[dnet] = vps_by_ingrt
-            #ranked_vps = [vps[0] for vps in vps_by_ingrt.values()]
-            ranked_vps = [','.join(vps) for vps in vps_by_ingrt.values()]
+            ranked_vps = [vps[0] for vps in vps_by_ingrt.values()]
             f.write("{},{}\n".format(dnet, ','.join(ranked_vps)))
 
     #with open(sys.argv[2], 'wb+') as f:
