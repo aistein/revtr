@@ -1,5 +1,17 @@
 #!/bin/bash
 
+if [ $# -eq 0 ]; then
+    echo "usage: ./run_case_study <IPv4 Address>"
+    exit 1;
+fi
+
+synchronization_barrier () {
+    arr=("$@")
+    for pid in "${arr[@]}"; do
+        wait "$pid"
+    done
+}
+
 dest=$1
 
 scripts="./case-study-scripts"
@@ -7,7 +19,7 @@ asn=$("$scripts"/lookup_dnet.py "$dest" asn ./bgpdumps/ipasn20181203.dat)
 bgp=$("$scripts"/lookup_dnet.py "$dest" bgp ./bgpdumps/ipasn20181203.dat)
 s24=$("$scripts"/lookup_dnet.py "$dest" s24 ./bgpdumps/ipasn20181203.dat)
 
-output_dir="./logs/automated_case_studies/cs_${dest}"
+output_dir="./automated_case_studies/cs_${dest}"
 if [ ! -d "$output_dir" ]; then
     mkdir -p "$output_dir"
 fi
@@ -18,6 +30,7 @@ latest_results="./results/results_3_9_2019"
 grep "$dest" "$latest_results"/asn_res.csv &> "$output_dir"/calc_algo_stats.out & pids+=("$!")
 grep "$dest" "$latest_results"/bgp_res.csv &>> "$output_dir"/calc_algo_stats.out & pids+=("$!")
 grep "$dest" "$latest_results"/bgp_res.csv &>> "$output_dir"/calc_algo_stats.out & pids+=("$!")
+echo "-I- done parsing calc_algo_stats..."
 
 # Step 2) run the 3 ranking algorithms
 
@@ -37,24 +50,34 @@ dists_by_ingr_by_dnet_dir="$datadir/rankings/ingress_cover"
 
 cp "$datadir"/rankings/set_cover_rankings.csv "$output_dir"
 
-# Step 3) gather test measurements to the target destination
+echo "-I- done deploying ranking algorithms"
+
+# Step 3) gather test & training measurements to the target destination
 
 testing_dir="$datadir/test/vp_measurements_annotated"
 grep "$dest" "$testing_dir"/asn/* &> "$output_dir"/test_measurements-asn & pids+=("$!")
+grep "$asn" "$training_dir"/asn/* &> "$output_dir"/train_measurements-asn & pids+=("$!")
 grep "$dest" "$testing_dir"/bgp/* &> "$output_dir"/test_measurements-bgp & pids+=("$!")
+grep "$bgp" "$training_dir"/bgp/* &> "$output_dir"/train_measurements-bgp & pids+=("$!")
 grep "$dest" "$testing_dir"/s24/* &> "$output_dir"/test_measurements-s24 & pids+=("$!")
+grep "$s24" "$training_dir"/s24/* &> "$output_dir"/train_measurements-s24 & pids+=("$!")
 
+synchronization_barrier "${pids[@]}"
+echo "-I- done gathering test & training measurements"
 # Step 4) identify vps that were < 9 hops from the dest
 
 "$scripts"/vps_in_dest_range.py "$dest" "$output_dir"/test_measurements-asn | sort -n &> "$output_dir"/best_vps-asn & pids+=("$!")
 "$scripts"/vps_in_dest_range.py "$dest" "$output_dir"/test_measurements-bgp | sort -n &> "$output_dir"/best_vps-bgp & pids+=("$!")
 "$scripts"/vps_in_dest_range.py "$dest" "$output_dir"/test_measurements-s24 | sort -n &> "$output_dir"/best_vps-s24 & pids+=("$!")
 
+synchronization_barrier "${pids[@]}"
+echo "-I- done identifying optimal VPs"
 # Step 5) see if best vps traversed same logical ingresses from rankings in both training (to dest) and testing (to dnet) data
 
-"$scripts"/grade_ingress_ranking.py "$dest" "$asn" "$output_dir"/logical_ingr_ips-"$asn" "$output_dir"/best_vps-asn &> "$output_dir"/ingress_grades-asn & pids+=("$!")
-"$scripts"/grade_ingress_ranking.py "$dest" "$bgp" "$output_dir"/logical_ingr_ips-"$bgp" "$output_dir"/best_vps-bgp &> "$output_dir"/ingress_grades-bgp & pids+=("$!")
-"$scripts"/grade_ingress_ranking.py "$dest" "$s24" "$output_dir"/logical_ingr_ips-"$s24" "$output_dir"/best_vps-s24 &> "$output_dir"/ingress_grades-s24 & pids+=("$!")
+"$scripts"/grade_ingress_ranking.py "$dest" asn "$asn" "$output_dir" &> "$output_dir"/ingress_grades-asn & pids+=("$!")
+"$scripts"/grade_ingress_ranking.py "$dest" bgp "$bgp" "$output_dir" &> "$output_dir"/ingress_grades-bgp & pids+=("$!")
+"$scripts"/grade_ingress_ranking.py "$dest" s24 "$s24" "$output_dir" &> "$output_dir"/ingress_grades-s24 & pids+=("$!")
+echo "-I- done deploying ranking graders"
 
 
 

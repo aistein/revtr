@@ -6,7 +6,7 @@ import os
 from collections import defaultdict
 
 if len(sys.argv) < 2:
-    exit("Usage: rank_vps_set_cover <rr_probe_dir>")
+    exit("Usage: rank_vps_set_cover <unannotated rr_probe_dir>")
 
 rr_probe_dir = os.path.abspath(sys.argv[1])
 

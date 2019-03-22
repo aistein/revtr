@@ -20,7 +20,7 @@ mkdir -p $results_dir/ingress_cover/bgp
 mkdir -p $results_dir/ingress_cover/s24
 
 echo generating set cover rankings
-./rank_vps_set_cover $probe_dir > $results_dir/set_cover_rankings.txt &
+./scripts/rank_vps_set_cover $probe_dir > $results_dir/set_cover_rankings.txt &
 
 echo making destination cover data...
 dbd_asn=$results_dir/destination_cover/asn/dests_by_dnet.pickle

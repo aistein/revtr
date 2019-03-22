@@ -2,6 +2,7 @@ __pycache__/
 logs/
 data/
 bgpdumps/
+automated_case_studies/
 results/
 pipeline/configurations/credentials.yml
 *.log
