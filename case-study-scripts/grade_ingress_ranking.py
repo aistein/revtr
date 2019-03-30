@@ -19,7 +19,7 @@ except:
     exit("usage: ./grade_ingress_ranking.py <target-ip> <target-dnet> <source_dir>")
 
 best_vps_file = os.path.join(source_dir,"best_vps-{}".format(dnet_type))
-ips_by_ingr_file = os.path.join(source_dir,"logical_ingr_ips-{}".format(target_dnet))
+ips_by_ingr_file = os.path.join(source_dir,"logical_ingr_ips-{}".format(dnet_type))
 test_measurements = os.path.join(source_dir, "test_measurements-{}".format(dnet_type))
 train_measurements = os.path.join(source_dir, "train_measurements-{}".format(dnet_type))
 

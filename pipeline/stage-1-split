@@ -41,11 +41,11 @@ from collections import defaultdict
 #==========================================================
 
 try:
-    configfile = open("./revtr.map_and_split.config.yml", 'r')
+    configfile = open("./pipeline/configurations/revtr.map_and_split.config.yml", 'r')
     configurations = yaml.load(configfile)
     configfile.close()
 except (FileNotFoundError,IndexError):
-    raise ValueError('error: config.yml either not found or incorrect.')
+    exit('error: config.yml either not found or incorrect.')
 
 
 # flag indicating if the measurement files need to be downloaded or if they are stored locally
@@ -128,6 +128,8 @@ def WriteSet(vpfile):
 # SetupDirs ...
 # Ensures that the directories we need are correctly set up
 def SetupDirs():
+    if not os.path.exists(datadir):
+        os.makedirs(datadir)
     if not os.path.exists(datadir+'/test/vp_measurements/'+groupby):
         os.makedirs(datadir+'/test/vp_measurements/'+groupby)
     if not os.path.exists(datadir+'/train/vp_measurements/'+groupby):

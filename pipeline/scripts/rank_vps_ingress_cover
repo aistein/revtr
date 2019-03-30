@@ -45,7 +45,7 @@ if __name__ == '__main__':
     out_file  = sys.argv[3]
     ipasn_file = sys.argv[4] if len(sys.argv) > 4 else None
 
-    if dnet_type not in ['bgp', '24', 'asn']:
+    if dnet_type not in ['bgp', 's24', 'asn']:
         exit('Invalid dnet type: {}'.format(dnet_type))
 
     if dnet_type in ['bgp', 'asn'] and not ipasn_file:
@@ -71,10 +71,11 @@ if __name__ == '__main__':
 
         with open(os.path.join(probe_dir, fname), 'r') as f:
             for row in csv.reader(f):
+                dnet = row[0]
                 dest = row[1]
-                hops = row[2:]
+                hops = row[3:]
                 try:
-                    dnet = dnet_lookup(dest)
+                    #dnet = dnet_lookup(dest)
                     ingr, dist = ingr_lookup(hops, dnet, dnet_lookup)
                 except: 
                     continue

@@ -1,11 +1,27 @@
-#! /bin/sh
+#! /bin/bash
 
+# -- Moved Annotation into Stage 1.5 --
 # annotate probes with 3 entries at front: <DNET>, <DETS>, <DIST>, ...
-./scripts/annotate_probes <original_probe_dir>/s24 <target_dir_for_annotated_probes>/s24
-./scripts/annotate_probes <original_probe_dir>/asn <target_dir_for_annotated_probes>/asn
-./scripts/annotate_probes <original_probe_dir>/prefix <target_dir_for_annotated_probes>/bgp
+#./scripts/annotate_probes <original_probe_dir>/s24 <target_dir_for_annotated_probes>/s24
+#./scripts/annotate_probes <original_probe_dir>/asn <target_dir_for_annotated_probes>/asn
+#./scripts/annotate_probes <original_probe_dir>/prefix <target_dir_for_annotated_probes>/bgp
 
 # run emulation for each DNET definition
-./scripts/calc_algo_stats <annotated_test_dir> <rankings_dir> <K> s24 <opt: ipasn_file>
-./scripts/calc_algo_stats <annotated_test_dir> <rankings_dir> <K> asn <opt: ipasn_file>
-./scripts/calc_algo_stats <annotated_test_dir> <rankings_dir> <K> bgp <opt: ipasn_file>
+if [ $# -lt 5 ]; then
+    echo "usage: ./stage-3-test <annotated_test_dir> <rankings_dir> <K> <ipasn_file> <output_dir>" && exit 1
+fi
+
+annotated_test_dir=$1
+rankings_dir=$2
+K=$3
+ipasn_file=$4
+output_dir=$5
+
+if [ ! -d $output_dir ]; then
+    mkdir $output_dir
+fi
+
+scripts=$(pwd)/pipeline/scripts
+$scripts/calc_algo_stats $annotated_test_dir/s24 $rankings_dir $K s24 $ipasn_file &> $output_dir/s24_res.csv &
+$scripts/calc_algo_stats $annotated_test_dir/asn $rankings_dir $K asn $ipasn_file &> $output_dir/asn_res.csv &
+$scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K bgp $ipasn_file &> $output_dir/bgp_res.csv &

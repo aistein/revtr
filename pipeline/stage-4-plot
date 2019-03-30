@@ -13,7 +13,7 @@ from collections import defaultdict
 #==========================================================
 
 try:
-    configfile = open("./configurations/revtr.parse_stats.config.yml", 'r')
+    configfile = open("./pipeline/configurations/revtr.parse_stats.config.yml", 'r')
     configurations = yaml.load(configfile)
     configfile.close()
 except (FileNotFoundError,IndexError):

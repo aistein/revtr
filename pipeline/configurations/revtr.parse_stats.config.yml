@@ -1,2 +1,2 @@
-stats_dir: /home/ubuntu/elen9002/results_naive_3_11_2019
-output_dir: /home/ubuntu/elen9002/results_naive_3_11_2019/parsing
+stats_dir: /home/ubuntu/elen9002/data/3_27_2019/test_results
+output_dir: /home/ubuntu/elen9002/3_27_2019/stats

@@ -102,17 +102,18 @@ if __name__ == '__main__':
 
     dists_by_vp_by_ingr_by_dnet = None
 
-    if len(sys.argv) < 4:
-        exit('Usage ./aggreatge_ingresses_and_rank_single_dnet <dnet> <dest-by-ingress-by-dnet json file> <output-dir>')
+    if len(sys.argv) < 5:
+        exit('Usage ./aggreatge_ingresses_and_rank_single_dnet <dnet> <dest-by-ingress-by-dnet json file> <output-dir> <dnet-type>')
 
     target_dnet = sys.argv[1]
+    dnet_type = sys.argv[4]
 
     with open(sys.argv[2], 'r') as f:
         dists_by_vp_by_ingr_by_dnet = json.loads(f.read())
 
     output_dir = sys.argv[3]
-    ingr_ips_file = "logical_ingr_ips-{}".format(target_dnet)
-    ingr_vps_file = "logical_ingr_vps-{}".format(target_dnet)
+    ingr_ips_file = "logical_ingr_ips-{}".format(dnet_type)
+    ingr_vps_file = "logical_ingr_vps-{}".format(dnet_type)
 
     vps_by_ingrt_by_dnet = {}
     vps_by_ingrt = aggregate_ingresses(dists_by_vp_by_ingr_by_dnet[target_dnet])

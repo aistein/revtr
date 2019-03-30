@@ -9,6 +9,8 @@ if [ $# -lt 4 ]; then
     echo "Usage: stage-2-train <probe_dir> <train_dir> <results_dir> <ipasn_file>" && exit 1
 fi
 
+scripts=$(pwd)/pipeline/scripts
+
 echo making output dir...
 mkdir -p $results_dir
 mkdir -p $results_dir/destination_cover/asn
@@ -20,20 +22,20 @@ mkdir -p $results_dir/ingress_cover/bgp
 mkdir -p $results_dir/ingress_cover/s24
 
 echo generating set cover rankings
-./scripts/rank_vps_set_cover $probe_dir > $results_dir/set_cover_rankings.txt &
+$scripts/rank_vps_set_cover $probe_dir > $results_dir/set_cover_rankings.txt &
 
 echo making destination cover data...
 dbd_asn=$results_dir/destination_cover/asn/dests_by_dnet.pickle
 dbd_bgp=$results_dir/destination_cover/bgp/dests_by_dnet.pickle
 dbd_s24=$results_dir/destination_cover/s24/dests_by_dnet.pickle
 
-./scripts/make_dests_by_dnet $train_dir/asn $dbd_asn &
+$scripts/make_dests_by_dnet $train_dir/asn $dbd_asn &
 asn_dc_done=$!
 echo starting proc $asn_dc_done
-./scripts/make_dests_by_dnet $train_dir/prefix $dbd_bgp &
+$scripts/make_dests_by_dnet $train_dir/prefix $dbd_bgp &
 bgp_dc_done=$!
 echo starting proc $bgp_dc_done
-./scripts/make_dests_by_dnet $train_dir/s24 $dbd_s24 &
+$scripts/make_dests_by_dnet $train_dir/s24 $dbd_s24 &
 s24_dc_done=$!
 echo starting proc $s24_dc_done
 
@@ -42,13 +44,13 @@ ingr_asn=$results_dir/ingress_cover/asn/vp_dists_by_ingr_by_dnet.json
 ingr_bgp=$results_dir/ingress_cover/bgp/vp_dists_by_ingr_by_dnet.json
 ingr_s24=$results_dir/ingress_cover/s24/vp_dists_by_ingr_by_dnet.json
 
-./scripts/rank_vps_ingress_cover $train_dir/asn asn $ingr_asn $ipasn_file &
+$scripts/rank_vps_ingress_cover $train_dir/asn asn $ingr_asn $ipasn_file &
 asn_ic_done=$!
 echo starting proc $asn_ic_done
-./scripts/rank_vps_ingress_cover $train_dir/prefix bgp $ingr_bgp $ipasn_file &
+$scripts/rank_vps_ingress_cover $train_dir/prefix bgp $ingr_bgp $ipasn_file &
 bgp_ic_done=$!
 echo starting proc $bgp_ic_done
-./scripts/rank_vps_ingress_cover $train_dir/s24 24 $ingr_s24 &
+$scripts/rank_vps_ingress_cover $train_dir/s24 s24 $ingr_s24 &
 s24_ic_done=$!
 echo starting proc $s24_ic_done
 
@@ -58,29 +60,29 @@ dc_s24=$results_dir/destination_cover/s24/rankings_by_dnet.csv
 
 wait $asn_dc_done &&\
     echo making destination cover rankings for $asn_dc_done
-./scripts/rank_vps_destination_cover $dbd_asn $train_dir/asn > $dc_asn &
+$scripts/rank_vps_destination_cover $dbd_asn $train_dir/asn > $dc_asn &
 
 wait $bgp_dc_done &&\
     echo making destination cover rankings for $bgp_dc_done
-./scripts/rank_vps_destination_cover $dbd_bgp $train_dir/prefix > $dc_bgp &
+$scripts/rank_vps_destination_cover $dbd_bgp $train_dir/prefix > $dc_bgp &
 
 wait $s24_dc_done &&\
     echo making destination cover rankings for $s24_dc_done
-./scripts/rank_vps_destination_cover $dbd_s24 $train_dir/s24 > $dc_s24 &
+$scripts/rank_vps_destination_cover $dbd_s24 $train_dir/s24 > $dc_s24 &
 
 echo destination cover done
 
 wait $asn_ic_done &&\
    echo making ingress cover rankings for $asn_ic_done
-./scripts/aggregate_ingresses_and_rank $ingr_asn $results_dir/ingress_cover/asn/rankings_by_dnet.csv &
+$scripts/aggregate_ingresses_and_rank $ingr_asn $results_dir/ingress_cover/asn/rankings_by_dnet.csv &
 
 wait $bgp_ic_done &&\
     echo making ingress cover rankings for $bgp_ic_done
-./scripts/aggregate_ingresses_and_rank $ingr_bgp $results_dir/ingress_cover/bgp/rankings_by_dnet.csv &
+$scripts/aggregate_ingresses_and_rank $ingr_bgp $results_dir/ingress_cover/bgp/rankings_by_dnet.csv &
 
 wait $s24_ic_done &&\
     echo making ingress cover rankings for $s24_ic_done
-./scripts/aggregate_ingresses_and_rank $ingr_s24 $results_dir/ingress_cover/s24/rankings_by_dnet.csv &
+$scripts/aggregate_ingresses_and_rank $ingr_s24 $results_dir/ingress_cover/s24/rankings_by_dnet.csv &
 
 for j in $(jobs -p); do
     wait $j
