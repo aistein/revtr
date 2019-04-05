@@ -1,9 +1,9 @@
 download: false
-bgpdump: /home/ubuntu/data/bgpdumps/2018-12-03.dat
+bgpdump: bgpdumps/ipasn20181203.dat
 rooturl: http://bgoodc.cs.columbia.edu/storage/measurements_2018/csv_echo_replies_20181201/
-datadir: /home/ubuntu/data/12_17_2018
-vpdir: /home/ubuntu/data/vps
-numvps: 100
-numcpus: 8
+datadir: data/4_3_2019
+vpdir: /data/vps
+numvps: 84
+numcpus: 16
 # groupby - must be one of (prefix,asn,s24)
 groupby: s24

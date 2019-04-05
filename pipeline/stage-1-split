@@ -33,19 +33,23 @@ import yaml
 import json
 import time
 import csv
-import threading
+#import threading
+import multiprocessing as mp
 from collections import defaultdict
+
+import pyasn
+from scripts.lookup_dnet import dnets_of
 
 #==========================================================
 # Configuration Parsing (YAML)
 #==========================================================
 
 try:
-    configfile = open("./revtr.map_and_split.config.yml", 'r')
+    configfile = open("./pipeline/configurations/revtr.map_and_split.config.yml", 'r')
     configurations = yaml.load(configfile)
     configfile.close()
 except (FileNotFoundError,IndexError):
-    raise ValueError('error: config.yml either not found or incorrect.')
+    exit('error: config.yml either not found or incorrect.')
 
 
 # flag indicating if the measurement files need to be downloaded or if they are stored locally
@@ -57,13 +61,15 @@ vpdir = configurations['vpdir']
 # directory where all output data should be stored
 datadir = configurations['datadir']
 
-# groupby indicates the which of the methods (prefix,asn,s24) we care about
-groupby = configurations['groupby']
+# bgpdump ipasn file
+ipasnfile = configurations['bgpdump']
+
+# the number of CPUs available on the running machine
+numcpus = configurations['numcpus']
 
 # sources / outputs
-traindir = datadir + "/train/vp_measurements"
-testdir = datadir + "/test/vp_measurements"
-mapfile = datadir + "/mappings/dests_by_"+groupby+".json"
+traindir = datadir + "/train/vp_measurements/all"
+testdir = datadir + "/test/vp_measurements/all"
 
 #==========================================================
 # Core Data Splitting Functions
@@ -71,55 +77,64 @@ mapfile = datadir + "/mappings/dests_by_"+groupby+".json"
 
 # ddict
 # dictionary that will hold decision to place in train/test for all destinations
-# items look like {... , dest-ip: ("train"/"test", dnet-prefix)}
+# items look like {... , dest-ip: ("train"/"test", DnetEntry)}
 ddict = defaultdict(tuple)
 
-# _tag
-# given 'ip' tell me if 'ip' has been marked for "test" or for "train"
-# returns the corresponding dset entry if it exists, else None
-def _tag(ip):
-    if ip in ddict.keys():
-        return ddict[ip]
+# writer
+# Receive transformed data from worker processes through the specified input queue.
+# Each output file per VP has only a single writer process.
+def writer(q, lock, target, vpfile):
+    with lock:
+        print("starting writer-{}-{} for VP {}".format(target, os.getpid(), vpfile))
+
+    f = None
+    if target == 'train':
+        f = open(os.path.join(traindir, vpfile), 'w')
     else:
-        return None
+        f = open(os.path.join(testdir, vpfile), 'w')
 
-# _filterbydest
-# given 'vpfile'.csv, return pings from that file for which dest is in ddict
-# returns 3-tuple (tag, dest-ip, [ping-hops]), where tag = ("train/test", dnet-prefix)
-def _filterbydest(vpfile):
-    # print("Filtering VP: {}".format(vpfile))
-    with open(vpdir + '/' + vpfile, 'r') as csvfile:
-        datareader = csv.reader(csvfile)
-        yield from map(lambda ping: (_tag(ping[0]), ping[0], ping[1:]),
-            filter(lambda ping: _tag(ping[0]) != None, datareader))
+    f.write("asn,bgp,s24,dest,hop1,hop2,hop3,hop4,hop5,hop6,hop7,hop8,hop9\n")
+    f.flush()
 
-# _writetask
-# Given 'vpfile'.csv, create two new CSV files containing "train" and "test" data splits.
+    while True:
+        m = q.get()
+        if m == 'kill':
+            break
+        #with lock:
+        #    print("writer-{}-{} writing line: {}".format(target, os.getpid(), m)) 
+        f.write(m)
+        f.flush()
+
+    f.close()
+    with lock:
+        print("exiting writer-{}-{} for VP {}".format(target, os.getpid(), vpfile))
+    return
+
+# worker
+# Given 'vpfile'.csv (in RAM), create two mappings "train" and "test".
 # The split is based on tags assigned to each destination IP address, to be found in ddict
-def _writetask(vpfile):
-    print("Thread executing write task for VP: {}...\n".format(vpfile))
-    trainfile = open(traindir + '/' + groupby + '/' + vpfile, 'w')
-    testfile = open(testdir + '/' + groupby + '/' + vpfile, 'w')
-    for ((target, dnet), dest, hops) in _filterbydest(vpfile):
-        if dnet == str(None):
-            continue
-        if target == "train":
-            # print("TRAIN <-- {},{},{}".format(dnet, dest, ','.join(hops)))
-            trainfile.write("{},{},{}\n".format(dnet, dest, ','.join(hops)))
-        if target == "test":
-            # print("TEST <-- {},{},{}".format(dnet, dest, ','.join(hops)))
-            testfile.write("{},{},{}\n".format(dnet, dest, ','.join(hops)))
-    trainfile.close()
-    testfile.close()
-    print("Thread completed write task for VP: {}\n".format(vpfile))
+def worker(data, left, right, mp_ddict, train_queue, test_queue, lock):
+    with lock:
+        print("starting worker {}".format(os.getpid()))
+        #print("data is sized {}".format(len(data)))
+        #print("chunk is sized {}".format(right-left))
+        #print("ddict is sized {}".format(len(mp_ddict)))
+    for i in range (left, right):
+        probe = data[i].split(',')
+        dest, hops = probe[0], probe[1:]
+        if dest in mp_ddict.keys():
+            target, dentry = mp_ddict[dest]
+            if target == "train":
+                train_queue.put("{},{},{},{},{}".format(
+                    dentry.asn, dentry.bgp, dentry.s24, dest, ','.join(hops)))
+            if target == "test":
+                test_queue.put("{},{},{},{},{}".format(
+                    dentry.asn, dentry.bgp, dentry.s24, dest, ','.join(hops)))
 
-# WriteSet ...
-# Spin off a _writetask thread for the given 'vpfile'
-# Returns thread handle
-def WriteSet(vpfile):
-    t = threading.Thread(target=_writetask, args=(vpfile,), name=vpfile)
-    t.start()
-    return t
+    with lock:
+        print("worker {} exiting...".format(os.getpid()))
+
+    return
 
 #==========================================================
 # File/Dir Processing Functions
@@ -128,10 +143,12 @@ def WriteSet(vpfile):
 # SetupDirs ...
 # Ensures that the directories we need are correctly set up
 def SetupDirs():
-    if not os.path.exists(datadir+'/test/vp_measurements/'+groupby):
-        os.makedirs(datadir+'/test/vp_measurements/'+groupby)
-    if not os.path.exists(datadir+'/train/vp_measurements/'+groupby):
-        os.makedirs(datadir+'/train/vp_measurements/'+groupby)
+    if not os.path.exists(datadir):
+        os.makedirs(datadir)
+    if not os.path.exists(traindir):
+        os.makedirs(traindir)
+    if not os.path.exists(testdir):
+        os.makedirs(testdir)
 
 #==========================================================
 # Main
@@ -139,48 +156,124 @@ def SetupDirs():
 
 def main():
     start = time.time()
-
-    # setup the needed directory structure
-    SetupDirs()
-
+    
+    mapfile = datadir + "/mappings/dests_by_prefix.json"
+    ipasn = pyasn.pyasn(ipasnfile)
     # Split the annotated, filtered measurement data into two sets
     num_prefixes = 0
     with open(mapfile, 'r') as jsonfile:
         json_data = json.load(jsonfile)
-        for dnet, dests in json_data.items():
-            # print("Analyzing BGP-routable prefix {}\n".format(dnet))
+        for prefix, dests in json_data.items():
+            print("tagging measurements for prefix {}\n".format(prefix))
             if len(dests) > 1:
                 index = 0
                 num_prefixes = num_prefixes + 1
                 for dest in dests:
+                    dentry = dnets_of(dest, ipasn)
                     # ~1/5th of data goes in the testing set
                     if index % 5 == 0:
-                        ddict[dest] = ("test", dnet)
+                        ddict[dest] = ("test", dentry)
                     # ~4/5ths of data goes in the training set
                     else:
-                        ddict[dest] = ("train", dnet)
+                        ddict[dest] = ("train", dentry)
                     # increment the index
                     index = index + 1
 
     print("Input contained {} unique, viable destination networks.\n".format(num_prefixes))
     print("Identified {} unique destination IPs to split.\n".format(len(ddict.keys())))
 
+    # 3 dnet definitions
+    # - The only actual grouping should be by BGP-prefix
+    # - Want 2 more copies of the BGP-grouping that assign ASN and S24
+
+    # setup the needed directory structure
+    SetupDirs()
+
     # for each VP, create trianing and test CSV files
     # -- putting this in a separate loop avoids opening each vpfile several times
     # -- each VP will be processed in parallel with 'threading'
-    threads = set()
-    for vpfile in os.listdir(vpdir):
-        print("Writing set for VP: {}\n".format(vpfile))
-        threads.add(WriteSet(vpfile))
-
-    # wait for all threads to complete
-    for t in threads:
-        print("Waiting for thread {} to complete...\n".format(t.name))
-        t.join()
-        print("Thread {} to completed.\n".format(t.name))
     
+    # use Manager so that processes can pass stuff to eachother
+    manager = mp.Manager()
+    train_queue, test_queue = manager.Queue(), manager.Queue()
+    lock = manager.Lock()
+
+    # Process each VP using producer/consumer pattern on a pool of workers
+    for vpfile in os.listdir(vpdir):
+        # Read the entire file into RAM
+        print("Reading file {} into memory...".format(vpfile))
+        with open(os.path.join(vpdir, vpfile), 'r') as csvfile:
+            data = manager.list(csvfile.readlines())
+
+        print("How much Data? {}".format(len(data)))
+
+        # calculate pool configurations
+        num_processes = (2 * numcpus) // 3
+        num_consumers = 2
+        num_producers = num_processes - num_consumers
+        chunksize, leftover = len(data) // num_producers, len(data) % num_producers
+        left, to_deploy = leftover, num_producers
+         
+        pool = mp.Pool(processes=num_processes)
+
+        producers = []
+        consumers = []
+
+        # create the producers
+        print("Creating Producers...")
+        if leftover:
+            producer = mp.Process(target=worker,
+                args=(data, 0, left, ddict, train_queue, test_queue, lock))
+            producers.append(producer)
+            to_deploy -= 1
+        for i in range(to_deploy):
+            producer = mp.Process(target=worker, 
+                    args=(data, left, left+chunksize, ddict, train_queue, test_queue, lock))
+            producers.append(producer)
+            left += chunksize
+
+        # create the two consumers
+        print("Creating Consumers...")
+        for target in ['train', 'test']:
+            queue = train_queue if target == 'train' else test_queue
+            consumer = mp.Process(target=writer, args=(queue, lock, target, vpfile))
+            consumers.append(consumer)
+
+        # start producers
+        print("Starting Producers...")
+        for producer in producers:
+            producer.start()
+
+        # start consumers
+        with lock:
+            print("Starting Consumers...")
+        for consumer in consumers:
+            consumer.start()
+                
+        # wait for all producers to finish
+        with lock:
+            print("Waiting for Producers to complete...")
+        for p in producers:
+            p.join()
+            with lock:
+                print("producer completed.")
+
+        with lock:
+            print("{} remaining to process for train.".format(train_queue.qsize()))
+            print("{} remaining to process for test.".format(test_queue.qsize()))
+
+        train_queue.put('kill')
+        test_queue.put('kill')
+        for c in consumers:
+            c.join()
+            with lock:
+                print("consumer completed.")
+
+        # close the thread pool
+        pool.close()
+
     end = time.time()
-    print("time elapsed: {}".format(end-start)) 
+    print("Done. time elapsed: {}".format(end-start)) 
 
 if __name__ == "__main__":
     main()

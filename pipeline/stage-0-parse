@@ -32,8 +32,8 @@ from bs4 import BeautifulSoup
 #==========================================================
 
 try:
-    credfile = open("./credentials.yml", 'r')
-    configfile = open("./revtr.map_and_split.config.yml", 'r')
+    credfile = open("./pipeline/configurations/credentials.yml", 'r')
+    configfile = open("./pipeline/configurations/revtr.map_and_split.config.yml", 'r')
     configurations = {**yaml.load(credfile), **yaml.load(configfile)}
     credfile.close()
     configfile.close()
@@ -192,6 +192,8 @@ if download:
 # SetupDirs ...
 # Ensures that the directories we need are correctly set up
 def SetupDirs():
+    if not os.path.exists(datadir):
+        os.makedirs(datadir)
     if not os.path.exists(datadir+'/mappings'):
         os.makedirs(datadir+'/mappings')
     if not os.path.exists(datadir+'/vps') and download:
