@@ -22,6 +22,8 @@ if [ ! -d $output_dir ]; then
 fi
 
 scripts=$(pwd)/pipeline/scripts
-$scripts/calc_algo_stats $annotated_test_dir/s24 $rankings_dir $K s24 $ipasn_file &> $output_dir/s24_res.csv &
-$scripts/calc_algo_stats $annotated_test_dir/asn $rankings_dir $K asn $ipasn_file &> $output_dir/asn_res.csv &
+#$scripts/calc_algo_stats $annotated_test_dir/s24 $rankings_dir $K s24 $ipasn_file &> $output_dir/s24_res.csv &
+#$scripts/calc_algo_stats $annotated_test_dir/asn $rankings_dir $K asn $ipasn_file &> $output_dir/asn_res.csv &
+$scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K s24 $ipasn_file &> $output_dir/s24_res.csv &
+$scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K asn $ipasn_file &> $output_dir/asn_res.csv &
 $scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K bgp $ipasn_file &> $output_dir/bgp_res.csv &

@@ -1,0 +1,86 @@
+#! /usr/bin/python3
+
+# This script actually doesnt do the rankings,
+# it just maps probes to ingresses and stores
+# probe-ingress distance dumped to json
+
+import os
+import sys
+import csv
+from collections import defaultdict
+from ipaddress import ip_address, ip_network
+import pyasn
+import json
+
+bgpdb = None
+
+def slash_24_of(ip_str):
+    dots = ip_str.strip().split('.')
+    dots[-1] = '0/24'
+    return '.'.join(dots)
+
+def bgp_prfx_of(ip_str):
+    _, prfx = bgpdb.lookup(ip_str)
+    return prfx
+
+def asn_of(ip_str):
+    asn, _ = bgpdb.lookup(ip_str)
+    return str(asn)
+
+def ingr_lookup(hops, dnet, dnet_lookup):
+    ingr = None
+    for i, h in enumerate(hops):
+        if dnet_lookup(h) == dnet:
+            return h, i + 1  
+    return None, None
+
+if __name__ == '__main__':
+
+    if len(sys.argv) < 4:
+        exit('Usage: rank_vps_ingress_cover <probes_directory> <dnet_type>'\
+            '<output_file> opt:<ipasn_file>')
+
+    probe_dir = sys.argv[1]
+    dnet_type = sys.argv[2]
+    out_file  = sys.argv[3]
+    ipasn_file = sys.argv[4] if len(sys.argv) > 4 else None
+
+    if dnet_type not in ['bgp', 's24', 'asn']:
+        exit('Invalid dnet type: {}'.format(dnet_type))
+
+    if dnet_type in ['bgp', 'asn'] and not ipasn_file:
+        exit('Dnet type <{}> requires valid ipasn file'.format(dnet_type))
+
+    if ipasn_file:
+        bgpdb = pyasn.pyasn(ipasn_file)
+
+    dnet_lookup = slash_24_of
+    if dnet_type == 'bgp':
+        dnet_lookup = bgp_prfx_of
+    elif dnet_type == 'asn':
+        dnet_lookup = asn_of
+
+    vp_dists_by_ingr_by_dnet = defaultdict(
+            lambda : defaultdict(
+            lambda : defaultdict(list)))
+
+    for fname in os.listdir(probe_dir):
+
+        vp = fname.replace('.csv', '')
+        print('processing {}...'.format(vp))
+
+        with open(os.path.join(probe_dir, fname), 'r') as f:
+            for row in csv.reader(f):
+                dnet = row[0]
+                dest = row[1]
+                hops = row[3:]
+                try:
+                    #dnet = dnet_lookup(dest)
+                    ingr, dist = ingr_lookup(hops, dnet, dnet_lookup)
+                except: 
+                    continue
+                if dnet and ingr: # ok as long as neither is NIL
+                    vp_dists_by_ingr_by_dnet[dnet][ingr][vp].append(dist)
+
+    with open(out_file, 'w+') as f:
+        json.dump(vp_dists_by_ingr_by_dnet, f)

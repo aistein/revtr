@@ -1,0 +1,37 @@
+#! /usr/local/bin/python3
+import sys
+import pickle
+import json
+
+def min_vp_per_ingr(dists_by_vp_by_ingr):
+    min_vp_by_ingr = {}
+    for ingr, dists_by_vp in sorted(dists_by_vp_by_ingr.items(), key=lambda t: len(t[1])):
+        min_vp, min_dist = '', float('inf')
+        for vp, dists in dists_by_vp.items():
+            local_min = min(dists)
+            if local_min < min_dist:
+                min_dist = local_min
+                min_vp = vp 
+        min_vp_by_ingr[ingr] = min_vp
+    return min_vp_by_ingr
+
+if __name__ == '__main__':
+
+    dists_by_vp_by_ingr_by_dnet = None
+
+    if len(sys.argv) < 3:
+        exit('usage: aggregate_ingresses_and_rank_physical <dists_by_vp_by_ingr_by_dnet>.json <ingr_rankings_out>.csv')
+
+    with open(sys.argv[1], 'r') as f:
+        dists_by_vp_by_ingr_by_dnet = json.loads(f.read())
+
+    min_vp_by_ingr_by_dnet = {}
+    with open(sys.argv[2], 'w+') as f:
+        for dnet in dists_by_vp_by_ingr_by_dnet:
+            min_vp_by_ingr = min_vp_per_ingr(dists_by_vp_by_ingr_by_dnet[dnet])
+            min_vp_by_ingr_by_dnet[dnet] = min_vp_by_ingr
+            ranked_vps = []
+            for vp in min_vp_by_ingr.values():
+                if vp not in ranked_vps:
+                    ranked_vps.append(vp)
+            f.write("{},{}\n".format(dnet, ','.join(ranked_vps)))

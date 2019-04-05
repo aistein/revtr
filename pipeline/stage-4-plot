@@ -45,12 +45,15 @@ def parse_line(line):
                 'set_vp': line[4],
                 'set_dist': -1 if line[5] == '' else int(line[5]),
                 'set_pings': -1 if line[6] == '' else int(line[6]),
-                'ingr_vp': line[7],
-                'ingr_dist': -1 if line[8] == '' else int(line[8]),
-                'ingr_pings': -1 if line[9] == '' else int(line[9]),
-                'dest_vp': line[10],
-                'dest_dist': -1 if line[11] == '' else int(line[11]),
-                'dest_pings': -1 if line[12] == '' else int(line[12])
+                'ingrfi_vp': line[7],
+                'ingrfi_dist': -1 if line[8] == '' else int(line[8]),
+                'ingrfi_pings': -1 if line[9] == '' else int(line[9]),
+                'ingrfo_vp': line[10],
+                'ingrfo_dist': -1 if line[11] == '' else int(line[11]),
+                'ingrfo_pings': -1 if line[12] == '' else int(line[12]),
+                'dest_vp': line[13],
+                'dest_dist': -1 if line[14] == '' else int(line[14]),
+                'dest_pings': -1 if line[15] == '' else int(line[15])
             }
     return dnet, dest, entry
 
@@ -73,10 +76,10 @@ def optprinter(dn, ds, mx):
 
 def main():
 
-    print("[     | opt # reach |  sc # reach  |  dc # reach  |  ic # reach  | M(sc-opt) | M(dc-opt) | M(ic-opt) ]")
-    print("[=====|=============|==============|==============|==============|===========|===========|===========]")
+    print("[     | opt # reach |  sc # reach  |  dc # reach  |  if # reach  |  io # reach  | M(sc-opt) | M(dc-opt) | M(if-opt) | M(io-opt) ]")
+    print("[=====|=============|==============|==============|==============|==============|===========|===========|===========|===========]")
 
-    multi_bar_graph_stats = np.zeros(shape=(3,4,11), dtype=int)
+    multi_bar_graph_stats = np.zeros(shape=(3,5,11), dtype=int)
 
     for type_index, dnet_type in enumerate(('bgp', 'asn', 's24')):
 
@@ -86,11 +89,11 @@ def main():
 
         #results_file = os.path.join(stats_dir, dnet_type, dnet_type + '_fucking_results.goddamn')
         results_file = os.path.join(stats_dir, dnet_type + '_res.csv')
-        op_in_range, sc_in_range, dc_in_range, ic_in_range = 0, 0, 0, 0
-        sc_cum_delta, dc_cum_delta, ic_cum_delta = 0, 0, 0
-        sc_cum_pings, dc_cum_pings, ic_cum_pings = 0, 0, 0
-        n_opt, n_sc, n_dc, n_ic = 0, 0, 0, 0
-        n_scp, n_dcp, n_icp = 0, 0, 0
+        op_in_range, sc_in_range, dc_in_range, icf_in_range, ico_in_range = 0, 0, 0, 0, 0
+        sc_cum_delta, dc_cum_delta, icf_cum_delta, ico_cum_delta = 0, 0, 0, 0
+        sc_cum_pings, dc_cum_pings, icf_cum_pings, ico_cum_pings = 0, 0, 0, 0
+        n_opt, n_sc, n_dc, n_icf, n_ico = 0, 0, 0, 0, 0
+        n_scp, n_dcp, n_icfp, n_icop = 0, 0, 0, 0
 
         for dnet, dest, entry in results_by_dnet(results_file):
             #optprinter(dnet,dest,entry)
@@ -120,50 +123,67 @@ def main():
                 multi_bar_graph_stats[type_index][2][entry['dest_dist']] += 1
             else:
                 multi_bar_graph_stats[type_index][2][-1] += 1
-            # ingress-cover stats
-            if entry['ingr_pings'] > -1:
-                n_icp += 1
-                ic_cum_pings += entry['ingr_pings']
-            if entry['ingr_dist'] > -1:
-                n_ic += 1
-                ic_in_range += 1
-                ic_cum_delta += entry['ingr_dist'] - entry['opt_dist'] 
-                multi_bar_graph_stats[type_index][3][entry['ingr_dist']] += 1
+            # ingress-cover stats (first-inside)
+            if entry['ingrfi_pings'] > -1:
+                n_icfp += 1
+                icf_cum_pings += entry['ingrfi_pings']
+            if entry['ingrfi_dist'] > -1:
+                n_icf += 1
+                icf_in_range += 1
+                icf_cum_delta += entry['ingrfi_dist'] - entry['opt_dist'] 
+                multi_bar_graph_stats[type_index][3][entry['ingrfi_dist']] += 1
             else:
                 multi_bar_graph_stats[type_index][3][-1] += 1
+            # ingress-cover stats (first-outside)
+            if entry['ingrfo_pings'] > -1:
+                n_icop += 1
+                ico_cum_pings += entry['ingrfo_pings']
+            if entry['ingrfo_dist'] > -1:
+                n_ico += 1
+                ico_in_range += 1
+                ico_cum_delta += entry['ingrfo_dist'] - entry['opt_dist'] 
+                multi_bar_graph_stats[type_index][4][entry['ingrfo_dist']] += 1
+            else:
+                multi_bar_graph_stats[type_index][4][-1] += 1
         
-        sc_avg_delta, dc_avg_delta, ic_avg_delta = -1, -1, -1
+        sc_avg_delta, dc_avg_delta, icf_avg_delta, ico_avg_delta = -1, -1, -1, -1
         if n_sc > 0:
             sc_avg_delta = sc_cum_delta / n_sc
         if n_dc > 0:
             dc_avg_delta = dc_cum_delta / n_dc
-        if n_ic > 0:
-            ic_avg_delta = ic_cum_delta / n_ic
+        if n_icf > 0:
+            icf_avg_delta = icf_cum_delta / n_icf
+        if n_ico > 0:
+            ico_avg_delta = ico_cum_delta / n_ico
 
-        p_sc, p_dc, p_ic = sc_in_range / op_in_range, dc_in_range / op_in_range, ic_in_range / op_in_range
+        p_sc, p_dc, p_icf, p_ico = sc_in_range / op_in_range, dc_in_range / op_in_range, icf_in_range / op_in_range, ico_in_range / op_in_range
 
         # table
-        print(" {: >11} | {: >6}({:0.2f}) | {: >6}({:0.2f}) | {: >6}({:0.2f}) | {: >9.5f} | {: >9.5f} | {: >9.5f} ]".format(
-            op_in_range, sc_in_range, p_sc, dc_in_range, p_dc, ic_in_range, p_ic, sc_avg_delta, dc_avg_delta, ic_avg_delta))
+        print(" {: >11} | {: >6}({:0.2f}) | {: >6}({:0.2f}) | {: >6}({:0.2f}) | {: >6}({:0.2f}) | {: >9.5f} | {: >9.5f} | {: >9.5f} | {: >9.5f}]".format(
+            op_in_range, sc_in_range, p_sc, dc_in_range, p_dc, icf_in_range, p_icf, ico_in_range, p_ico,
+            sc_avg_delta, dc_avg_delta, icf_avg_delta, ico_avg_delta))
 
         # record the number of pings for each method
-        sc_avg_pings, dc_avg_pings, ic_avg_pings = 0, 0, 0
+        sc_avg_pings, dc_avg_pings, icf_avg_pings, ico_avg_pings = 0, 0, 0, 0
         #sc_avg_pings, dc_avg_pings, ic_avg_pings = sc_cum_pings / n_opt, dc_cum_pings / n_opt, ic_cum_pings / n_opt
         if n_scp > 0:
             sc_avg_pings = sc_cum_pings / n_scp
         if n_dcp > 0:
             dc_avg_pings = dc_cum_pings / n_dcp
-        if n_icp > 0:
-            ic_avg_pings = ic_cum_pings / n_icp
-        print("[{}] SC-Avg-Pings: {}, DC-Avg-Pings: {}, IC-Avg-Pings: {}".format(
-            dnet_type, sc_avg_pings, dc_avg_pings, ic_avg_pings))
+        if n_icfp > 0:
+            icf_avg_pings = icf_cum_pings / n_icfp
+        if n_icop > 0:
+            ico_avg_pings = ico_cum_pings / n_icop
+        print("[{}] SC-Avg-Pings: {}, DC-Avg-Pings: {}, ICF-Avg-Pings: {}, ICO-Avg-Pings: {}".format(
+            dnet_type, sc_avg_pings, dc_avg_pings, icf_avg_pings, ico_avg_pings))
     
     # stacked bar plot
     ind = np.arange(1,11)
     width = 0.15
     for type_index, plot_type in enumerate(('bgp', 'asn', 's24')):
-        opt = plt.bar(ind-3*width/2, multi_bar_graph_stats[type_index][0][1:11], width=width, color='r', align='center')
-        ingr = plt.bar(ind-width/2, multi_bar_graph_stats[type_index][3][1:11], width=width, color='y', align='center')
+        opt = plt.bar(ind-5*width/2, multi_bar_graph_stats[type_index][0][1:11], width=width, color='r', align='center')
+        ingrfi = plt.bar(ind-3*width/2, multi_bar_graph_stats[type_index][3][1:11], width=width, color='y', align='center')
+        ingrfo = plt.bar(ind-width/2, multi_bar_graph_stats[type_index][4][1:11], width=width, color='k', align='center')
         topk = plt.bar(ind+width/2, multi_bar_graph_stats[type_index][1][1:11], width=width, color='g', align='center')
         dest = plt.bar(ind+3*width/2, multi_bar_graph_stats[type_index][2][1:11], width=width, color='b', align='center')
         plt.ylabel('# Destinations RR-Reachable')
@@ -171,7 +191,7 @@ def main():
         plt.title('Ranked VP Distance from Destination ('+plot_type+')')
         plt.xticks(ind, ('1','2','3','4','5','6','7','8','9','>9'))
         plt.yticks(np.arange(0,60000,10000))
-        plt.legend((opt, topk, dest, ingr), ('Optimal VP', 'Top K', 'Destination Cover', 'Ingress Cover'))
+        plt.legend((opt, topk, dest, ingrfi, ingrfo), ('Optimal VP', 'Top K', 'Destination Cover', 'Ingress Cover-FI', 'Ingress Cover-FO'))
         plt.savefig('ranked_vp_distance_from_destination-'+plot_type+'.png')
         plt.clf()
         

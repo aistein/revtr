@@ -1,0 +1,3 @@
+1) Now that we are classifying destinations only by BGP, DC and SC don't need to be run on ASN or S24 -- fix the pipeline to reflect this
+2) For IC, compare ordering ingrs by num-meas to ordering ingrs by min-dist
+3) Is it really true that for SC, the average delta is < 1?  This would mean SC is giving more hops than either DC or IC

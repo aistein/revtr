@@ -1,8 +1,18 @@
 #! /usr/bin/python3
 
-# This script actually doesnt do the rankings,
-# it just maps probes to ingresses and stores
-# probe-ingress distance dumped to json
+"""
+ This script actually doesnt do the rankings,
+ it just maps probes to ingresses and stores
+ probe-ingress distance dumped to json
+
+ 6 different definitions of ingress:
+ 1) BGP-Prefix; First Inside
+ 2) ASN; First Inside
+ 3) /24; First Inside
+ 4) BGP-Prefix; First Outside
+ 5) ASN; First Outside
+ 6) /24; First Outside
+"""
 
 import os
 import sys
@@ -28,21 +38,26 @@ def asn_of(ip_str):
     return str(asn)
 
 def ingr_lookup(hops, dnet, dnet_lookup):
-    ingr = None
+    fi, dfi, fo, dfo = None, 0, None, 0
     for i, h in enumerate(hops):
         if dnet_lookup(h) == dnet:
-            return h, i + 1  
-    return None, None
+            fi, dfi = h, i + 1  
+        if dnet_lookup(h) == dnet and i > 0:
+            fo, dfo = hops[i-1], i-1
+        else:
+            fo, dfo = None, -1
+    return fi, dfi, fo, dfo
 
 if __name__ == '__main__':
 
     if len(sys.argv) < 4:
         exit('Usage: rank_vps_ingress_cover <probes_directory> <dnet_type>'\
-            '<output_file> opt:<ipasn_file>')
+            '<output_tag> opt:<ipasn_file>')
 
     probe_dir = sys.argv[1]
     dnet_type = sys.argv[2]
-    out_file  = sys.argv[3]
+    out_file_fi = "{}-first_inside.json".format(sys.argv[3])
+    out_file_fo = "{}-first_outside.json".format(sys.argv[3])
     ipasn_file = sys.argv[4] if len(sys.argv) > 4 else None
 
     if dnet_type not in ['bgp', 's24', 'asn']:
@@ -51,6 +66,7 @@ if __name__ == '__main__':
     if dnet_type in ['bgp', 'asn'] and not ipasn_file:
         exit('Dnet type <{}> requires valid ipasn file'.format(dnet_type))
 
+    print('loading ipasn file...')
     if ipasn_file:
         bgpdb = pyasn.pyasn(ipasn_file)
 
@@ -60,7 +76,10 @@ if __name__ == '__main__':
     elif dnet_type == 'asn':
         dnet_lookup = asn_of
 
-    vp_dists_by_ingr_by_dnet = defaultdict(
+    vp_dists_by_ingrfi_by_dnet = defaultdict(
+            lambda : defaultdict(
+            lambda : defaultdict(list)))
+    vp_dists_by_ingrfo_by_dnet = defaultdict(
             lambda : defaultdict(
             lambda : defaultdict(list)))
 
@@ -71,16 +90,21 @@ if __name__ == '__main__':
 
         with open(os.path.join(probe_dir, fname), 'r') as f:
             for row in csv.reader(f):
-                dnet = row[0]
+                #dnet = row[0]
                 dest = row[1]
                 hops = row[3:]
                 try:
-                    #dnet = dnet_lookup(dest)
-                    ingr, dist = ingr_lookup(hops, dnet, dnet_lookup)
+                    # All the destinations chosen are grouped by prefix
+                    # However, it is still interesting to ask "what is the ingress into this dnet"
+                    # ... when 'ingress' can be into the ASN/Prefix/S24 that contains the dest
+                    dnet = dnet_lookup(dest)
+                    ingrfi, distfi, ingrfo, distfo = ingr_lookup(hops, dnet, dnet_lookup)
                 except: 
                     continue
-                if dnet and ingr: # ok as long as neither is NIL
-                    vp_dists_by_ingr_by_dnet[dnet][ingr][vp].append(dist)
+                if dnet and ingrfi:  # ok as long as neither is NIL
+                    vp_dists_by_ingrfi_by_dnet[dnet][ingrfi][vp].append(distfi)
+                    vp_dists_by_ingrfo_by_dnet[dnet][ingrfo][vp].append(distfo)
 
-    with open(out_file, 'w+') as f:
-        json.dump(vp_dists_by_ingr_by_dnet, f)
+    with open(out_file_fi, 'w+') as fi, open(out_file_fo, 'w+') as fo:
+        json.dump(vp_dists_by_ingrfi_by_dnet, fi)
+        json.dump(vp_dists_by_ingrfo_by_dnet, fo)
