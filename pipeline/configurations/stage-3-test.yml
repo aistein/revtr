@@ -1,0 +1,4 @@
+test_dir: data/4_3_2019/test/vp_measurements/annotated/all 
+rankings_dir: data/4_3_2019/train_results
+output_dir: data/4_3_2019/test_results
+K: 10

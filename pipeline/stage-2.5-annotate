@@ -1,0 +1,21 @@
+#! /bin/bash
+
+if [ $# -lt 1 ]; then
+    echo "usage: stage-2.5-annotate <test-and-train-dir>"
+    exit 1
+fi
+
+vp_dir=$1
+test_dir=$1/test/vp_measurements
+train_dir=$1/train/vp_measurements
+
+if [ ! -d $train_dir/annotated/all ]; then
+    mkdir -p $train_dir/annotated/all
+fi
+if [ ! -d $test_dir/annotated/all ]; then
+    mkdir -p $test_dir/annotated/all
+fi
+
+scripts=$(pwd)/pipeline/scripts
+$scripts/annotate_probes $train_dir/all $train_dir/annotated/all &
+$scripts/annotate_probes $test_dir/all $test_dir/annotated/all &

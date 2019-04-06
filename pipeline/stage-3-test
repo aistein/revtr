@@ -1,29 +1,132 @@
-#! /bin/bash
+#! /usr/bin/python3
+import os
+import sys
+import csv
+import pyasn
+import yaml
+import json
+from ipaddress import ip_network
+from collections import defaultdict
+from collections import namedtuple
 
-# -- Moved Annotation into Stage 1.5 --
-# annotate probes with 3 entries at front: <DNET>, <DETS>, <DIST>, ...
-#./scripts/annotate_probes <original_probe_dir>/s24 <target_dir_for_annotated_probes>/s24
-#./scripts/annotate_probes <original_probe_dir>/asn <target_dir_for_annotated_probes>/asn
-#./scripts/annotate_probes <original_probe_dir>/prefix <target_dir_for_annotated_probes>/bgp
+DnetEntry = namedtuple('DnetEntry',['asn','bgp','s24'])
 
-# run emulation for each DNET definition
-if [ $# -lt 5 ]; then
-    echo "usage: ./stage-3-test <annotated_test_dir> <rankings_dir> <K> <ipasn_file> <output_dir>" && exit 1
-fi
+if __name__ == '__main__':
 
-annotated_test_dir=$1
-rankings_dir=$2
-K=$3
-ipasn_file=$4
-output_dir=$5
+    try:
+        configfile = open("./pipeline/configurations/stage-3-test.yml", 'r')
+        configurations = yaml.load(configfile, Loader=yaml.SafeLoader)
+        configfile.close()
+    except (FileNotFoundError, IndexError):
+        exit('error: stage-3-test.yml either not found or incorrect.')
 
-if [ ! -d $output_dir ]; then
-    mkdir $output_dir
-fi
+    test_dir = configurations['test_dir']
+    rankings_dir = configurations['rankings_dir']
+    output_dir = configurations['output_dir']
+    K = configurations['K']
 
-scripts=$(pwd)/pipeline/scripts
-#$scripts/calc_algo_stats $annotated_test_dir/s24 $rankings_dir $K s24 $ipasn_file &> $output_dir/s24_res.csv &
-#$scripts/calc_algo_stats $annotated_test_dir/asn $rankings_dir $K asn $ipasn_file &> $output_dir/asn_res.csv &
-$scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K s24 $ipasn_file &> $output_dir/s24_res.csv &
-$scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K asn $ipasn_file &> $output_dir/asn_res.csv &
-$scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K bgp $ipasn_file &> $output_dir/bgp_res.csv &
+    vp_dist_by_dest = defaultdict(list)
+    for csv_name in os.listdir(test_dir):
+        vp = csv_name.replace('.csv', '')
+
+        with open(os.path.join(test_dir, csv_name), 'r') as f:
+            for row in csv.reader(f):
+                dentry = DnetEntry(row[0:3])
+                dest = row[3]
+                dist = int(row[4])
+                vp_dist_by_dest[dest].append((vp, (dist, dentry)))
+
+    set_cover_rankings = []
+    with open(os.path.join(rankings_dir, "set_cover_rankings.txt"), 'r') as f:
+        next(f) # skip the title line
+        for i, line in enumerate(f):
+            if K < i + 1: # stop after retrieving top-K VPs
+                break
+            set_cover_rankings.append(line.strip().split()[0])
+
+    ingrfi_rankings_by_dnet = {}
+    with open(os.path.join(rankings_dir,'ingress_cover','all','rankings_by_dnet-first_inside.csv'), 'r') as f:
+        for row in csv.reader(f):
+            ingrfi_rankings_by_dnet[row[0]] = row[1:]
+
+    ingrfo_rankings_by_dnet = {}
+    with open(os.path.join(rankings_dir,'ingress_cover','all','rankings_by_dnet-first_outside.csv'), 'r') as f:
+        for row in csv.reader(f):
+            ingrfo_rankings_by_dnet[row[0]] = row[1:]
+
+    dst_rankings_by_dnet = {}
+    with open(os.path.join(rankings_dir, 'destination_cover','all','rankings_by_dnet.csv'), 'r') as f:
+        for row in csv.reader(f):
+            dst_rankings_by_dnet[row[0]] = row[1:]
+
+    header = '# <destination>,<dnet>,<optimal_vp>,<optimal_dist>,<set_vp>,<set_dist>,<set_pings>,<ingrfi_vp>,<ingrfi_dist>,<ingrfi_pings>,<ingrfo_vp>,<ingrfo_dist>,<ingrfo_pings>,<dest_vp>,<dest_dist>,<dest_pings>'
+    af = open(os.path.join(output_dir,'asn_res.csv'), 'w+')
+    af.write(header)
+    bf = open(os.path.join(output_dir,'bgp_res.csv'), 'w+')
+    bf.write(header)
+    sf = open(os.path.join(output_dir,'s24_res.csv'), 'w+')
+    sf.write(header)
+    bad = 0
+    for dest, (vp_dist, dentry) in vp_dist_by_dest.items():
+        opt = [elem for elem in sorted(vp_dist, key=lambda x: int(x[1]) if int(x[1]) > 0 else 10)][0]
+        if int(opt[1]) == 10:
+            continue # if the optimal VP couldn't reach, no point in recording algo results
+
+        for dnet_type in ['asn','bgp','s24']:
+            if dnet_type == 'asn':
+                af.write('{},{},{},{},'.format(dest, dentry.asn, opt[0], opt[1]))
+            if dnet_type == 'bgp':
+                bf.write('{},{},{},{},'.format(dest, dentry.bgp, opt[0], opt[1]))
+            if dnet_type == 's24':
+                sf.write('{},{},{},{},'.format(dest, dentry.s24, opt[0], opt[1]))
+
+        dists = {vp: dist for vp, dist in vp_dist}
+        found = False
+        for i, vp in enumerate(set_cover_rankings):
+            if vp in dists and dists[vp] < 10:
+                    sys.stdout.write('{},{},{},'.format(vp, dists[vp], i + 1))
+                    found = True
+                    break
+        if not found:
+            #sys.stdout.write(',,{},'.format(len(set_cover_rankings)))
+            sys.stdout.write(',,,')
+
+        found = False
+        if dnet in ingrfi_rankings_by_dnet: 
+            for i, vp in enumerate(ingrfi_rankings_by_dnet[dnet]):
+                if vp in dists and dists[vp] < 10:
+                    sys.stdout.write('{},{},{},'.format(vp, dists[vp], i + 1))
+                    found = True
+                    break
+            if not found:
+                sys.stdout.write(',,{},'.format(len(ingrfi_rankings_by_dnet[dnet])))
+        else:
+            #sys.stdout.write(',,0,')
+            sys.stdout.write(',,,')
+
+        found = False
+        if dnet in ingrfo_rankings_by_dnet: 
+            for i, vp in enumerate(ingrfo_rankings_by_dnet[dnet]):
+                if vp in dists and dists[vp] < 10:
+                    sys.stdout.write('{},{},{},'.format(vp, dists[vp], i + 1))
+                    found = True
+                    break
+            if not found:
+                sys.stdout.write(',,{},'.format(len(ingrfo_rankings_by_dnet[dnet])))
+        else:
+            #sys.stdout.write(',,0,')
+            sys.stdout.write(',,,')
+
+        found = False
+        if dnet in dst_rankings_by_dnet:
+            for i, vp in enumerate(dst_rankings_by_dnet[dnet]):
+                if vp in dists and dists[vp] < 10:
+                    sys.stdout.write('{},{},{}'.format(vp, dists[vp], i + 1))
+                    found = True
+                    break
+            if not found:
+                sys.stdout.write(',,{}'.format(len(dst_rankings_by_dnet[dnet])))
+        else:
+            #sys.stdout.write(',,0')
+            sys.stdout.write(',,')
+        sys.stdout.write('\n')

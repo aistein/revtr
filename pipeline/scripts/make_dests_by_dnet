@@ -7,7 +7,7 @@ import pickle
 from collections import defaultdict
 
 if len(sys.argv) < 3:
-    exit('Usage: make_dests_by_dnet <annotated probe_dir> <output_file>')
+    exit('Usage: make_dests_by_dnet <training-probe_dir> <output_file>')
 
 probe_dir = sys.argv[1]
 output_file = sys.argv[2]
@@ -16,12 +16,15 @@ dests_by_dnet = defaultdict(set)
 for fname in os.listdir(probe_dir):
     print('processing {}'.format(fname))
     with open(os.path.join(probe_dir, fname), 'r') as f:
+        next(f) # skip header line
         for row in csv.reader(f):
-            dnet = row[0]
-            dest = row[1]
-            hops = row[2:]
+            asn, bgp, s24 = row[0:3]
+            dest = row[3]
+            hops = row[4:]
             if dest in hops:
-                dests_by_dnet[dnet].add(dest)
+                dests_by_dnet[asn].add(dest)
+                dests_by_dnet[bgp].add(dest)
+                dests_by_dnet[s24].add(dest)
 
 with open(output_file, 'wb+') as f:
     pickle.dump(dict(dests_by_dnet), f)
