@@ -207,8 +207,10 @@ if __name__ == '__main__':
 
         # Calculate Popularity Ratios
         print("-I- Calculating popularity scores...")
+        cumulative_ones_cnt, cumulative_cnt, ones_samples, n_samples = 0, 0, 0, 0
         with open(os.path.join(output_dir,'popularity_scores.csv'), 'w') as f:
             for vpt, count_by_ingr_by_tdef_by_ldef in count_by_ingr_by_tdef_by_ldef_by_vpt.items():
+                print("\tScoring VPT {}...".format(vpt))
                 for ldef in ['first-inside','first-outside']:
                     for tdef in ['asn','bgp','s24']:
                         max_ingr, max_count, total_count = '', 0, 0
@@ -217,17 +219,32 @@ if __name__ == '__main__':
                                 max_ingr, max_count = ingr, count
                             total_count += count
                         size = prefix_class(*vpt)
-                        f.write("{},{},{},{},{}\n".format(vpt[0], vpt[1], ldef, tdef, max_count / total_count))
-                        popularity_by_vpt_by_ldef_by_tdef[tdef][ldef][vpt] = max_count / total_count
+                        pscore = max_count / total_count
+                        f.write("{},{},{},{},{},{},{}\n".format(
+                            vpt[0], vpt[1], ldef, tdef, max_count, total_count, pscore))
+                        popularity_by_vpt_by_ldef_by_tdef[tdef][ldef][vpt] = pscore 
+                        if pscore == 1.0: 
+                            cumulative_ones_cnt += total_count
+                            ones_samples += 1
+                        cumulative_cnt, n_samples = cumulative_cnt + total_count, n_samples + 1
+        print("Avg #-Measurements when pscore is perfect: {}".format( cumulative_ones_cnt / ones_samples ))
+        print("Avg #-Measurements over all pscore calculations: {}".format( cumulative_cnt / total_count ))
 
     else: # popularity_scores.csv already exists
         
         print("-I- loading popularity_scores.csv ...")
+        cumulative_ones_cnt, cumulative_cnt, ones_samples, n_samples = 0, 0, 0, 0
         with open(os.path.join(output_dir,'popularity_scores.csv'), 'r') as f:
             r = csv.reader(f, delimiter=',')
             for entry in r:
-                vp, prefix, ldef, tdef, pscore = entry
+                vp, prefix, ldef, tdef, max_cnt, total_cnt, pscore = entry
                 popularity_by_vpt_by_ldef_by_tdef[tdef][ldef][(vp,prefix)] = float(pscore)
+                if float(pscore) == 1.0: 
+                    cumulative_ones_cnt += int(total_cnt)
+                    ones_samples += 1
+                cumulative_cnt, n_samples = cumulative_cnt + int(total_cnt), n_samples + 1
+        print("Avg #-Measurements when pscore is perfect: {}".format( cumulative_ones_cnt / ones_samples ))
+        print("Avg #-Measurements over all pscore calculations: {}".format( cumulative_cnt / n_samples ))
 
     # Plot the 6 CDFs (first-inside, first-outside) * (asn, bgp, s24)
     # Each plot should have 4 lines: small, medium, large, all (destination prefix classifications)
