@@ -1,4 +1,4 @@
-#! /usr/local/bin/python3
+#! /usr/bin/python3 -u
 
 """
 Generate a CDF of how commonly a VP uses its most popular ingress into a

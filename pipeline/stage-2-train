@@ -44,8 +44,8 @@ echo destination cover done
 
 wait $ic_done &&\
    echo making ingress cover rankings for $ic_done
-$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_inside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_inside.csv &
-$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_outside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_outside.csv &
+$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_inside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_inside.pkl &
+$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_outside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_outside.pkl &
 
 for j in $(jobs -p); do
     wait $j

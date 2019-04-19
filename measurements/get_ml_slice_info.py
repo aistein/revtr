@@ -11,11 +11,12 @@ from getpass import getpass
 from collections import defaultdict
 
 try:
-    username = str(sys.argv[1])
-    password = str(sys.argv[2])
-    out_dir  = os.path.normpath(sys.argv[3])
+    out_dir  = os.path.normpath(sys.argv[1])
 except:
-    exit("usage: get_ml_info.py <username> <password> <out_dir>")
+    exit("usage: get_ml_info.py <out_dir>")
+
+username = "as5281@columbia.edu"
+password = "\=;)[&'%!.<)"
 
 pl_slice = "uw_geoloc4"
 api_server = xmlrpclib.ServerProxy('https://www.planet-lab.org/PLCAPI/', allow_none=True)

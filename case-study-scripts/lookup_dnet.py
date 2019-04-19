@@ -31,3 +31,5 @@ if __name__ == '__main__':
         print(lookup.bgp)
     if dnet_type == 's24':
         print(lookup.s24)
+    if dnet_type == 'all':
+        print(lookup)

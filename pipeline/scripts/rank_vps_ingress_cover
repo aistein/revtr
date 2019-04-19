@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#! /usr/bin/python3 -u
 
 """
  This script actually doesnt do the rankings,
@@ -42,11 +42,17 @@ def slash_24_of(ip_str):
     return '.'.join(dots)
 
 def bgp_prfx_of(ip_str):
-    _, prfx = bgpdb.lookup(ip_str)
+    try:
+        _, prfx = bgpdb.lookup(ip_str)
+    except:
+        return None
     return prfx
 
 def asn_of(ip_str):
-    asn, _ = bgpdb.lookup(ip_str)
+    try:
+        asn, _ = bgpdb.lookup(ip_str)
+    except:
+        return None
     return str(asn)
 
 def dnet_lookup(ip, dnet_type):

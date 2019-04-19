@@ -1,4 +1,4 @@
-#! /usr/local/bin/python3
+#! /usr/bin/python3 -u
 import sys
 import pickle
 import heapq
@@ -30,7 +30,6 @@ if __name__ == '__main__':
     dists_by_vp_by_ingr_by_dnet = None
 
     if len(sys.argv) < 3:
-        #exit('usage: aggregate_ingresses_and_rank_physical <dists_by_vp_by_ingr_by_dnet>.json <ingr_rankings_out>.csv')
         exit('usage: aggregate_ingresses_and_rank_physical <dists_by_vp_by_ingr_by_dnet>.json <ingr_rankings_out>.pkl')
 
 
@@ -46,14 +45,3 @@ if __name__ == '__main__':
             min_vp_heap_by_ingr = min_vp_heap_per_ingr(dists_by_vp_by_ingr_by_dnet[dnet])
             min_vp_heap_by_ingr_by_dnet[dnet] = min_vp_heap_by_ingr
         pickle.dump(min_vp_heap_by_ingr_by_dnet, pkl, pickle.HIGHEST_PROTOCOL)
-
-    #min_vp_by_ingr_by_dnet = {}
-    #with open(sys.argv[2], 'w+') as f:
-    #    for dnet in dists_by_vp_by_ingr_by_dnet:
-    #        min_vp_by_ingr = min_vp_per_ingr(dists_by_vp_by_ingr_by_dnet[dnet])
-    #        min_vp_by_ingr_by_dnet[dnet] = min_vp_by_ingr
-    #        ranked_vps = []
-    #        for vp in min_vp_by_ingr.values():
-    #            if vp not in ranked_vps:
-    #                ranked_vps.append(vp)
-    #        f.write("{},{}\n".format(dnet, ','.join(ranked_vps)))

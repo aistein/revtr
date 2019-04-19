@@ -1,3 +1,5 @@
 sliceinfo/
 collections/
 dummy*
+*.log
+*.txt
