@@ -10,15 +10,18 @@ fi
 
 scripts=$(pwd)/pipeline/scripts
 
-echo making output dir...
+echo making output dirs...
 mkdir -p $results_dir
-mkdir -p $results_dir/destination_cover/asn
-mkdir -p $results_dir/destination_cover/bgp
-mkdir -p $results_dir/destination_cover/s24
+mkdir -p $results_dir/destination_cover/all
+mkdir -p $results_dir/ingress_cover/all
 
-mkdir -p $results_dir/ingress_cover/asn
-mkdir -p $results_dir/ingress_cover/bgp
-mkdir -p $results_dir/ingress_cover/s24
+#mkdir -p $results_dir/destination_cover/asn
+#mkdir -p $results_dir/destination_cover/bgp
+#mkdir -p $results_dir/destination_cover/s24
+#
+#mkdir -p $results_dir/ingress_cover/asn
+#mkdir -p $results_dir/ingress_cover/bgp
+#mkdir -p $results_dir/ingress_cover/s24
 
 echo generating set cover rankings
 $scripts/rank_vps_set_cover $train_dir/vp_measurements/all > $results_dir/set_cover_rankings.txt &
@@ -30,7 +33,8 @@ dc_done=$!
 echo starting proc $dc_done
 
 echo making ingress cover data...
-ingr_all=$results_dir/ingress_cover/all/vp_dists_by_ingr_by_dnet
+#ingr_all=$results_dir/ingress_cover/all/vp_dists_by_ingr_by_dnet
+ingr_all=$results_dir/ingress_cover/all/vp_dists_by_ingr_by_ndef_by_dprefix
 $scripts/rank_vps_ingress_cover $train_dir/vp_measurements/all $ingr_all $ipasn_file &
 ic_done=$!
 echo starting proc $ic_done
@@ -44,8 +48,9 @@ echo destination cover done
 
 wait $ic_done &&\
    echo making ingress cover rankings for $ic_done
-$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_inside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_inside.pkl &
-$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_outside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_outside.pkl &
+$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}.pkl $results_dir/ingress_cover/all/rankings_by_ndef_by_dprefix.pkl &
+#$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_inside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_inside.pkl &
+#$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_outside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_outside.pkl &
 
 for j in $(jobs -p); do
     wait $j

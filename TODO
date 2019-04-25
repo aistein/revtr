@@ -2,3 +2,8 @@
 2) For IC, compare ordering ingrs by num-meas to ordering ingrs by min-dist
 3) Is it really true that for SC, the average delta is < 1?  This would mean SC is giving more hops than either DC or IC
 4) Current multiprocessing Stage-1 takes 5 hours to run on the full set... if there is time, reconfigure to process 4 VPs at a time
+
+Fix the broken part! If you have a destination-prefix, give a list of rankings over only the measurements in
+that prefix!
+- fix aggregate_ingresses_and_rank_physical
+- fix rank_vps_ingress_cover

@@ -1,6 +1,11 @@
-test_dir: data/4_18_2019/test/vp_measurements/annotated/all 
-rankings_dir: data/4_18_2019/train_results
-output_dir: data/4_18_2019/test_results
-K: 10
-num_vps: 84
+#test_dir: data/4_18_2019/test/vp_measurements/annotated/all 
+test_dir: data/test/test/vp_measurements/annotated/all 
+#rankings_dir: data/4_18_2019/train_results
+rankings_dir: data/test/train_results
+#output_dir: data/4_18_2019/test_results
+output_dir: data/test/test_results
+#K: 10
+K: 1
+#num_vps: 84
+num_vps: 1
 ipasnfile: /data/workspace/bgpdumps/ipasn20181203.dat

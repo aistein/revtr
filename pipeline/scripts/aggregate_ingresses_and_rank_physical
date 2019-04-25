@@ -16,32 +16,35 @@ def min_vp_per_ingr(dists_by_vp_by_ingr):
         min_vp_by_ingr[ingr] = min_vp
     return min_vp_by_ingr
 
-def min_vp_heap_per_ingr(dists_by_vp_by_ingr):
-    min_vp_heap_by_ingr = {}
-    for ingr, dists_by_vp in dists_by_vp_by_ingr.items():
-        min_heap = []
-        for vp, dists in dists_by_vp.items():
-            heapq.heappush(min_heap, (min(dists), vp))
-        min_vp_heap_by_ingr[ingr] = min_heap
-    return min_vp_heap_by_ingr
+def min_vp_heap_per_ingr(dists_by_vp_by_ingr_by_ndef):
+    min_vp_heap_by_ingr_by_ndef = {}
+    for ndef, dists_by_vp_by_ingr in dists_by_vp_by_ingr_by_ndef.items():
+        if ndef not in min_vp_heap_by_ingr_by_ndef:
+            min_vp_heap_by_ingr_by_ndef[ndef] = {}
+        for ingr, dists_by_vp in dists_by_vp_by_ingr.items():
+            min_heap = []
+            for vp, dists in dists_by_vp.items():
+                heapq.heappush(min_heap, (min(dists), vp))
+            min_vp_heap_by_ingr_by_ndef[ndef][ingr] = min_heap
+    return min_vp_heap_by_ingr_by_ndef
 
 if __name__ == '__main__':
 
-    dists_by_vp_by_ingr_by_dnet = None
+    dists_by_vp_by_ingr_by_ndef_by_dprefix = None
 
     if len(sys.argv) < 3:
-        exit('usage: aggregate_ingresses_and_rank_physical <dists_by_vp_by_ingr_by_dnet>.json <ingr_rankings_out>.pkl')
+        exit('usage: aggregate_ingresses_and_rank_physical <dists_by_vp_by_ingr_by_ndef_by_dprefix>.pkl <ingr_rankings_out>.pkl')
 
 
     print("-I- rank_ingress_cover: loading json file...")
     with open(sys.argv[1], 'r') as f:
-        dists_by_vp_by_ingr_by_dnet = json.loads(f.read())
+        dists_by_vp_by_ingr_by_ndef_by_dprefix = json.load(f)
 
     print("-I- rank_ingress_cover: ranking VPs...")
-    min_vp_heap_by_ingr_by_dnet = {}
+    min_vp_heap_by_ingr_by_ndef_by_dprefix = {}
     with open(sys.argv[2], 'wb') as pkl:
-        for dnet in dists_by_vp_by_ingr_by_dnet:
-            print("-I- rank_ingress_cover: ranking VPs for dnet {}".format(dnet))
-            min_vp_heap_by_ingr = min_vp_heap_per_ingr(dists_by_vp_by_ingr_by_dnet[dnet])
-            min_vp_heap_by_ingr_by_dnet[dnet] = min_vp_heap_by_ingr
-        pickle.dump(min_vp_heap_by_ingr_by_dnet, pkl, pickle.HIGHEST_PROTOCOL)
+        for dprefix, dists_by_vp_by_ingr_by_ndef in dists_by_vp_by_ingr_by_ndef_by_dprefix.items():
+            print("-I- rank_ingress_cover: ranking VPs for dprefix {}".format(dprefix))
+            min_vp_heap_by_ingr_by_ndef = min_vp_heap_per_ingr(dists_by_vp_by_ingr_by_ndef)
+            min_vp_heap_by_ingr_by_ndef_by_dprefix[dprefix] = min_vp_heap_by_ingr_by_ndef
+        pickle.dump(min_vp_heap_by_ingr_by_ndef_by_dprefix, pkl, pickle.HIGHEST_PROTOCOL)

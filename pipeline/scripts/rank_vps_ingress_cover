@@ -3,7 +3,7 @@
 """
  This script actually doesnt do the rankings,
  it just maps probes to ingresses and stores
- probe-ingress distance dumped to json
+ probe-ingress distance dumped to pickle
 
  6 different definitions of ingress:
  1) BGP-Prefix; First Inside
@@ -29,8 +29,9 @@ if len(sys.argv) < 3:
     exit('Usage: rank_vps_ingress_cover <probes_directory> <output_tag> <ipasnfile>')
 
 probe_dir = sys.argv[1]
-out_file_fi = "{}-first_inside.json".format(sys.argv[2])
-out_file_fo = "{}-first_outside.json".format(sys.argv[2])
+#out_file_fi = "{}-first_inside.json".format(sys.argv[2])
+#out_file_fo = "{}-first_outside.json".format(sys.argv[2])
+out_file = "{}.pkl".format(sys.argv[2])
 ipasnfile = sys.argv[3]
 
 print('loading ipasn file...')
@@ -55,19 +56,19 @@ def asn_of(ip_str):
         return None
     return str(asn)
 
-def dnet_lookup(ip, dnet_type):
-    if dnet_type == 's24':
+def net_lookup(ip, net_type):
+    if net_type == 's24':
         return slash_24_of(ip)
-    if dnet_type == 'bgp':
+    if net_type == 'bgp':
         return bgp_prfx_of(ip)
     return asn_of(ip)
 
-def ingr_lookup(hops, dnet, dnet_type):
+def ingr_lookup(hops, dnet, net_type):
     fi, dfi, fo, dfo = None, 0, None, 0
     for i, h in enumerate(hops):
-        if dnet_lookup(h, dnet_type) == dnet:
+        if net_lookup(h, net_type) == dnet:
             fi, dfi = h, i + 1  
-        if dnet_lookup(h, dnet_type) == dnet and i > 0:
+        if net_lookup(h, net_type) == dnet and i > 0:
             fo, dfo = hops[i-1], i-1
         else:
             fo, dfo = None, -1
@@ -75,12 +76,10 @@ def ingr_lookup(hops, dnet, dnet_type):
 
 if __name__ == '__main__':
 
-    vp_dists_by_ingrfi_by_dnet = defaultdict(
+    vp_dists_by_ingr_by_ndef_by_dprefix = defaultdict(
             lambda : defaultdict(
-            lambda : defaultdict(list)))
-    vp_dists_by_ingrfo_by_dnet = defaultdict(
             lambda : defaultdict(
-            lambda : defaultdict(list)))
+            lambda : defaultdict(list))))
 
     for fname in os.listdir(probe_dir):
 
@@ -91,22 +90,23 @@ if __name__ == '__main__':
             next(f) # skip hader line
             for row in csv.reader(f):
                 dentry = DnetEntry(*row[0:3])
+                dprefix = dentry.bgp
                 dest = row[3]
                 hops = row[4:]
 
-                for dnet_type in ['asn','bgp','s24']:
+                for net_type in ['asn','bgp','s24']:
                     try:
                         # All the destinations chosen are grouped by prefix
-                        # However, it is still interesting to ask "what is the ingress into this dnet"
+                        # However, it is still interesting to ask "what is the ingress into this prefix"
                         # ... when 'ingress' can be into the ASN/Prefix/S24 that contains the dest
-                        dnet = eval('dentry.{}'.format(dnet_type))
-                        ingrfi, distfi, ingrfo, distfo = ingr_lookup(hops, dnet, dnet_type)
+                        dnet = eval('dentry.{}'.format(net_type))
+                        ingrfi, distfi, ingrfo, distfo = ingr_lookup(hops, dnet, net_type)
                     except: 
                         continue
                     if dnet and ingrfi:  # ok as long as neither is NIL
-                        vp_dists_by_ingrfi_by_dnet[dnet][ingrfi][vp].append(distfi)
-                        vp_dists_by_ingrfo_by_dnet[dnet][ingrfo][vp].append(distfo)
+                        vp_dists_by_ingr_by_ndef_by_dprefix[dprefix]['{}_fi'.format(net_type)][ingrfi][vp].append(distfi)
+                    if dnet and ingrfo:
+                        vp_dists_by_ingr_by_ndef_by_dprefix[dprefix]['{}_fo'.format(net_type)][ingrfo][vp].append(distfo)
 
-    with open(out_file_fi, 'w+') as fi, open(out_file_fo, 'w+') as fo:
-        json.dump(vp_dists_by_ingrfi_by_dnet, fi)
-        json.dump(vp_dists_by_ingrfo_by_dnet, fo)
+    with open(out_file, 'w+') as f:
+        json.dump(vp_dists_by_ingr_by_ndef_by_dprefix, f)
