@@ -14,6 +14,7 @@ echo making output dirs...
 mkdir -p $results_dir
 mkdir -p $results_dir/destination_cover/all
 mkdir -p $results_dir/ingress_cover/all
+mkdir -p $results_dir/popularity
 
 #mkdir -p $results_dir/destination_cover/asn
 #mkdir -p $results_dir/destination_cover/bgp
@@ -39,6 +40,12 @@ $scripts/rank_vps_ingress_cover $train_dir/vp_measurements/all $ingr_all $ipasn_
 ic_done=$!
 echo starting proc $ic_done
 
+echo making popularity data...
+do_mapping=False
+$scripts/calculate_training_ingress_popularity $train_dir/vp_measurements/all $results_dir/popularity $ipasn_file $do_mapping &
+pop_done=$!
+echo starting proc $pop_done
+
 dc_all=$results_dir/destination_cover/all/rankings_by_dnet.csv
 wait $dc_done &&\
     echo making destination cover rankings for $dc_done
@@ -46,9 +53,9 @@ $scripts/rank_vps_destination_cover $dbd_all $train_dir/vp_measurements/all $dc_
 
 echo destination cover done
 
-wait $ic_done &&\
+wait $ic_done && wait $pop_done &&\
    echo making ingress cover rankings for $ic_done
-$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}.pkl $results_dir/ingress_cover/all/rankings_by_ndef_by_dprefix.pkl &
+$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}.json $results_dir/popularity $results_dir/ingress_cover/all/rankings_by_ndef_by_dprefix.pkl &
 #$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_inside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_inside.pkl &
 #$scripts/aggregate_ingresses_and_rank_physical ${ingr_all}-first_outside.json $results_dir/ingress_cover/all/rankings_by_dnet-first_outside.pkl &
 

@@ -116,7 +116,7 @@ if __name__ == '__main__':
 
     print("-I- stage-3-test: loading ingress_cover_rankings...")
     with open(os.path.join(rankings_dir,'ingress_cover','all','rankings_by_ndef_by_dprefix.pkl'), 'rb') as f:
-        min_vp_heap_by_ingr_by_ndef_by_dprefix = pickle.load(f)
+        min_vp_heap_by_scored_ingr_by_ndef_by_dprefix = pickle.load(f)
 
     print("-I- stage-3-test: loading dest_cover_rankings...")
     dst_rankings_by_dnet = {}
@@ -169,96 +169,134 @@ if __name__ == '__main__':
         ping_limit = 500
         vp_chosen_by_ndef, num_hops_by_ndef, num_pings_by_ndef = {}, {}, {}
 
-        if dnets.bgp in min_vp_heap_by_ingr_by_ndef_by_dprefix: 
-            pings, found = 0, False
-            vps_attempted, ingrs_banned = set(), set()
-            wrong_ingr_cnt = 0
+        if dnets.bgp in min_vp_heap_by_scored_ingr_by_ndef_by_dprefix: 
+            #pings, found = 0, False
+            #vps_attempted, ingrs_banned = set(), set()
+            #wrong_ingr_cnt = 0
 
             # need a fresh deepcopy for each new destination
-            min_vp_heap_by_ingr_by_ndef = list(copy.deepcopy(min_vp_heap_by_ingr_by_ndef_by_dprefix[dnets.bgp]).items())
+            min_vp_heap_by_scored_ingr_by_ndef = list(copy.deepcopy(min_vp_heap_by_scored_ingr_by_ndef_by_dprefix[dnets.bgp]).items())
 
-            for ndef, min_vp_heap_by_ingr_dict in min_vp_heap_by_ingr_by_ndef:
-                num_ingrs, num_ingrs_attempted = len(min_vp_heap_by_ingr_dict), 0
-                print("... ndef {}, num_ingrs {}".format(ndef, num_ingrs))
+            for ndef, min_vp_heap_by_scored_ingr in min_vp_heap_by_scored_ingr_by_ndef:
 
-                min_vp_heap_by_ingr = list(min_vp_heap_by_ingr_dict.items())
+                pings, found, test_is_dest = 0, False, False
+                vps_attempted, ingrs_banned = set(), set()
+                wrong_ingr_cnt = 0
+
+                num_ingrs, num_ingrs_attempted = len(min_vp_heap_by_scored_ingr), 0
+                print("\t\t... ndef {}, num_ingrs {}".format(ndef, num_ingrs))
+
+                min_vp_heap_by_scored_ingr_dict = { ingr:mvph for _,ingr,mvph in min_vp_heap_by_scored_ingr }
                 net_type, tag = ndef.split('_')
 
                 # favor rotating through different ingresses over retrying the same ingress
-                while not found and pings < ping_limit and len(vps_attempted) < num_vps:
+                while not found and not test_is_dest and pings < ping_limit and len(vps_attempted) < num_vps:
 
-                    if num_ingrs_attempted >= 2 * num_ingrs:
-                        print("\t... tried all ingrs twice, giving up :(")
-                        break # giving up
-                    num_ingrs_attempted += 1
+                    #if num_ingrs_attempted >= 2 * num_ingrs:
+                    #    print("\t\t\t... tried all ingrs twice, giving up :(")
+                    #    break # giving up
+                    if len(min_vp_heap_by_scored_ingr) == 0:
+                        print("\t\t\t... tried all ingresses, giving up :(")
+                        break
 
-                    # pick ingrs randomly, continually removing bad VPs & ingresses
-                    ingr, min_vp_heap = random.choice(min_vp_heap_by_ingr)
+                    ## pick ingrs randomly, continually removing bad VPs & ingresses
+                    #ingr, min_vp_heap = random.choice(min_vp_heap_by_scored_ingr)
 
-                    if ingr in ingrs_banned:
-                        continue
+                    # ingrs are ordered by scoring heuristic, try them in order
+                    #for i in range(len(min_vp_heap_by_scored_ingr)):
+                    while min_vp_heap_by_scored_ingr:
+                        print("\t\t\t\t-I- current length of max_ingr_heap {}".format(len(min_vp_heap_by_scored_ingr)))
 
-                    print("\t-I- Trying ingr {}".format(ingr))
-                    print("\t... len(vps_attempted) {}, len(min_vp_heap) {}, pings {}".format(
-                        len(vps_attempted), len(min_vp_heap), pings))
+                        if found or test_is_dest:
+                            break
 
-                    while min_vp_heap and pings < ping_limit:
-
-                        min_vp_dist_to_ingr, min_vp = heapq.heappop(min_vp_heap)
-
-                        # don't bother trying this ingress if
-                        # - the min_vp is > 9 hops from the (trained) ingress
-                        if min_vp_dist_to_ingr > 9:
+                        #ingr, min_vp_heap = min_vp_heap_by_scored_ingr[i]
+                        score, ingr, min_vp_heap = heapq.heappop(min_vp_heap_by_scored_ingr)
+                        num_ingrs_attempted += 1
+                        if len(min_vp_heap) == 0:
                             ingrs_banned.add(ingr)
-                            break # discard ingr
+                            continue
 
-                        # don't bother trying this vp if:
-                        # - it's already been tried for this destination
-                        if min_vp in vps_attempted:
-                            break # rotate ingrs
+                        if ingr in ingrs_banned:
+                            continue
 
-                        pings += 1
-                        vps_attempted.add(min_vp)
+                        print("\t\t\t\t-I- Trying ingr {}, with score {}".format(ingr, score))
+                        print("\t\t\t\t... len(vps_attempted) {}, len(min_vp_heap) {}, pings {}".format(
+                            len(vps_attempted), len(min_vp_heap), pings))
 
-                        ## Try issuing a measurement now from this VP. Consider these cases:
-                        # 1) VP isn't RR-responsive --> immediately retry next VP for this ingress
-                        # 2) VP uses diff test-ingress vs. train-ingress --> rotate to next ingress
-                        # 3) VP is RR-responsive but too far away from test-ingr --> discard this ingress
-                        # 4) VP is RR-reachable --> record stats and move on to next ranking method!
+                        while min_vp_heap and pings < ping_limit:
 
-                        print("\t\t-I- Trying Min_VP {}, with train-dist {}".format(
-                            min_vp, min_vp_dist_to_ingr))
+                            min_vp_dist_to_ingr, min_vp = heapq.heappop(min_vp_heap)
 
-                        if min_vp not in test_metainfo_by_vp:
-                            print("\t\t\t...not RR-responsive --> retry ingr")
-                            continue # retry ingr
+                            # don't bother trying this ingress if
+                            # - the min_vp is > 9 hops from the (trained) ingress
+                            if min_vp_dist_to_ingr > 9:
+                                ingrs_banned.add(ingr)
+                                break # discard ingr
 
-                        _, dist, dentry, ientry = test_metainfo_by_vp[min_vp]
-                        test_ingr = eval('ientry.{}_{}'.format(net_type, tag))
+                            # don't bother trying this vp if:
+                            # - it's already been tried for this destination
+                            if min_vp in vps_attempted:
+                                #break # rotate ingrs
+                                continue # try getting a new VP for this ingr
 
-                        if ingr != test_ingr:
-                            print("\t\t\t...used wrong ingress {} instead of {} --> rotate".format(
-                                test_ingr, ingr))
-                            vps_attempted.remove(min_vp)
-                            pings, wrong_ingr_cnt = pings - 1, wrong_ingr_cnt + 1
-                            break # rotate ingrs
+                            pings += 1
+                            vps_attempted.add(min_vp)
 
-                        if dist == 10:
-                            print("\t\t\t...too far away --> remove ingr")
-                            ingrs_banned.add(ingr)
-                            break # discard ingr
+                            ## Try issuing a measurement now from this VP. Consider these cases:
+                            # 1) VP isn't RR-responsive --> immediately retry next VP for this ingress
+                            # 2) VP uses diff test-ingress vs. train-ingress --> rotate to next ingress
+                            # 3) VP is RR-responsive but too far away from test-ingr --> discard this ingress
+                            # 4) VP is RR-reachable --> record stats and move on to next ranking method!
 
-                        # Correct Ingress, RR-reachable
-                        vp_chosen_by_ndef[ndef], num_hops_by_ndef[ndef], num_pings_by_ndef[ndef] = min_vp, dist, pings
-                        print("\t\t\t...YekShamesh!")
-                        found = True
-                        break # (while) success - next ranking method!
+                            print("\t\t\t\t\t-I- Trying Min_VP {}, with train-dist {}".format(
+                                min_vp, min_vp_dist_to_ingr))
+
+                            if min_vp not in test_metainfo_by_vp:
+                                print("\t\t\t\t\t...not RR-responsive --> retry ingr")
+                                continue # retry ingr
+
+                            _, dist, dentry, ientry = test_metainfo_by_vp[min_vp]
+                            test_ingr = eval('ientry.{}_{}'.format(net_type, tag))
+
+                            # TODO: make this case pass if the ingress used is in the list of test-ingresses for this VP
+                            if ingr != test_ingr:
+                                if test_ingr in min_vp_heap_by_scored_ingr:
+                                    print("\t\t\t\t\t...used wrong ingress {} instead of {}, but that ingress IS in the ranking list with min-vp {}.. allowed.".format(
+                                        test_ingr, ingr, min_vp_heap_by_scored_ingr_dict[ingr][0]))
+                                #elif dist < 10:
+                                #    print("\t\t\t\t\t...used wrong ingress {} instead of {}, but this VP reached the dest!".format(test_ingr, ingr))
+                                elif test_ingr == dest:
+                                    print("\t\t\t\t\t...test ingress == destination, emulation incapable of succeeding, failure!")
+                                    test_is_dest = True
+                                    break
+                                else:
+                                    #print("\t\t\t\t\t...used wrong ingress {} instead of {} --> rotate".format(
+                                    #    test_ingr, ingr))
+                                    print("\t\t\t\t\t...used wrong ingress {} instead of {}, and its not in the ranking list.. --> retry ingr".format(
+                                        test_ingr, ingr))
+                                    vps_attempted.remove(min_vp)
+                                    #pings, wrong_ingr_cnt = pings - 1, wrong_ingr_cnt + 1
+                                    wrong_ingr_cnt = wrong_ingr_cnt + 1
+                                    #break # rotate ingrs
+                                    continue # retry ingr
+
+                            if dist == 10:
+                                print("\t\t\t\t\t...too far away --> remove ingr")
+                                ingrs_banned.add(ingr)
+                                break # discard ingr
+
+                            # Correct Ingress, RR-reachable
+                            vp_chosen_by_ndef[ndef], num_hops_by_ndef[ndef], num_pings_by_ndef[ndef] = min_vp, dist, pings
+                            print("\t\t\t\t\t...YekShamesh!")
+                            found = True
+                            break # (while) success - next ranking method!
 
                 # ZERO of the N pings tried produced a successful RR-reachable measurement!
                 if not found:
                     vp_chosen_by_ndef[ndef], num_hops_by_ndef[ndef], num_pings_by_ndef[ndef] = '', '', pings
 
-                print("...a wrong ingress was attempted {} times!".format(wrong_ingr_cnt))
+                print("\t\t...a wrong ingress was attempted {} times!".format(wrong_ingr_cnt))
 
             # write the results out to corresponding files
             for net_type in ['asn','bgp','s24']:

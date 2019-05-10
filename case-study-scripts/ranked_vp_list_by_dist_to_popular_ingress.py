@@ -5,8 +5,9 @@ import csv
 import json
 from collections import defaultdict
 
-pop_dir = '/data/workspace/data/popularity'
-target_prefix = '89.137.0.0/16'
+#pop_dir = '/data/workspace/data/popularity'
+pop_dir = '/data/workspace/data/4_19_2019/popularity'
+target_prefix = '209.58.192.0/19'
 
 pop_weight, vpd_weight = 0.5, 1.5
 assert(pop_weight + vpd_weight == 2.0)
@@ -116,7 +117,7 @@ with open('./ingr_rankings.csv', 'w') as f:
         num_ingrs = 10
 
         for ingr, score in reversed(sorted(score_by_ingr_by_ndef[ndef].items(), key=lambda t: t[1])):
-            f.write("89.137.0.0/16,{},{},{},{}".format(nloc,ntype,ingr,score))
+            f.write("{},{},{},{},{}".format(target_prefix,nloc,ntype,ingr,score))
             num_vps = 10
             for (min_dist, vp) in sorted(vps_dist_by_ingr_by_ndef[ndef][ingr]):
                 f.write(",{},{}".format(vp,min_dist))

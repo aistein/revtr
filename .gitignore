@@ -8,3 +8,5 @@ results/
 popularity_test/
 pipeline/configurations/credentials.yml
 *.log
+*.png
+*.csv

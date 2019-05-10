@@ -26,12 +26,12 @@ import json
 DnetEntry = namedtuple('DnetEntry', ['asn','bgp','s24'])
 
 if len(sys.argv) < 3:
-    exit('Usage: rank_vps_ingress_cover <probes_directory> <output_tag> <ipasnfile>')
+    exit('Usage: rank_vps_ingress_cover <unannotated probes_directory> <output_tag> <ipasnfile>')
 
 probe_dir = sys.argv[1]
 #out_file_fi = "{}-first_inside.json".format(sys.argv[2])
 #out_file_fo = "{}-first_outside.json".format(sys.argv[2])
-out_file = "{}.pkl".format(sys.argv[2])
+out_file = "{}.json".format(sys.argv[2])
 ipasnfile = sys.argv[3]
 
 print('loading ipasn file...')
@@ -65,9 +65,12 @@ def net_lookup(ip, net_type):
 
 def ingr_lookup(hops, dnet, net_type):
     fi, dfi, fo, dfo = None, 0, None, 0
+    found = False
     for i, h in enumerate(hops):
+        if found:
+            break
         if net_lookup(h, net_type) == dnet:
-            fi, dfi = h, i + 1  
+            fi, dfi, found = h, i + 1, True
         if net_lookup(h, net_type) == dnet and i > 0:
             fo, dfo = hops[i-1], i-1
         else:
@@ -87,7 +90,7 @@ if __name__ == '__main__':
         print('processing {}...'.format(vp))
 
         with open(os.path.join(probe_dir, fname), 'r') as f:
-            next(f) # skip hader line
+            next(f) # skip header line
             for row in csv.reader(f):
                 dentry = DnetEntry(*row[0:3])
                 dprefix = dentry.bgp
