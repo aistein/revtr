@@ -57,12 +57,20 @@ def parse_line(line):
             }
     return dnet, dest, entry
 
+IGNORE_BLACKLIST = True
+BLACKLIST = ['planetlab1.dtc.umn.edu', 'mlab1.yqm01.measurement-lab.org']
+def filter_blacklist(metrics):
+    def no_blacklisted_vps(metric):
+        entry = metric[2]
+        entry_vps = [entry['opt_vp'], entry['set_vp'], entry['ingrfi_vp'], entry['ingrfo_vp'], entry['dest_vp']]
+        return True if IGNORE_BLACKLIST else not any([blk_ip in entry_vps for blk_ip in BLACKLIST])
+    yield from filter(no_blacklisted_vps, metrics)
 
 def results_by_dnet(rfile):
     with open(rfile, 'r') as csvfile:
         datareader = csv.reader(csvfile, delimiter=',')
         next(datareader)
-        yield from map(parse_line, datareader)
+        yield from filter_blacklist(map(parse_line, datareader))
 
 def filter_in_range(metrics):
     yield from filter(lambda metric: metric[2]['opt_dist'] > -1, metrics)
@@ -190,7 +198,10 @@ def main():
         plt.xlabel('# Hops')
         plt.title('Ranked VP Distance from Destination ('+plot_type+')')
         plt.xticks(ind, ('1','2','3','4','5','6','7','8','9','>9'))
-        plt.yticks(np.arange(0,60000,10000))
+        if IGNORE_BLACKLIST:
+            plt.yticks(np.arange(0,65000,5000))
+        else:
+            plt.yticks(np.arange(0,6000,500)) # without blacklisted VPs
         plt.legend((opt, topk, dest, ingrfi, ingrfo), ('Optimal VP', 'Top K', 'Destination Cover', 'Ingress Cover-FI', 'Ingress Cover-FO'))
         plt.savefig('ranked_vp_distance_from_destination-'+plot_type+'.png')
         plt.clf()

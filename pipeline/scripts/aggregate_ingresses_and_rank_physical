@@ -37,8 +37,8 @@ def sort_by_ingr_score_per_ndef( min_vp_heap_by_ingr_by_ndef, score_by_ingr_by_n
         nloc = 'first-inside' if nloc == 'fi' else 'first-outside'
         return (nloc, ntype)
 
-    #pop_weight, vpd_weight = 0.5, 1.5
-    pop_weight, vpd_weight = 1.0, 1.0
+    pop_weight, vpd_weight = 0.5, 1.5
+    #pop_weight, vpd_weight = 1.0, 1.0
     #ordered = {}
     min_vp_heap_by_scored_ingr_by_ndef = {}
     assert(pop_weight + vpd_weight == 2.0)

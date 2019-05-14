@@ -10,3 +10,4 @@ pipeline/configurations/credentials.yml
 *.log
 *.png
 *.csv
+*.backup

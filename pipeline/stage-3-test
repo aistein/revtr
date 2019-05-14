@@ -177,16 +177,19 @@ if __name__ == '__main__':
             # need a fresh deepcopy for each new destination
             min_vp_heap_by_scored_ingr_by_ndef = list(copy.deepcopy(min_vp_heap_by_scored_ingr_by_ndef_by_dprefix[dnets.bgp]).items())
 
+
             for ndef, min_vp_heap_by_scored_ingr in min_vp_heap_by_scored_ingr_by_ndef:
 
                 pings, found, test_is_dest = 0, False, False
                 vps_attempted, ingrs_banned = set(), set()
-                wrong_ingr_cnt = 0
+                wrong_ingr_cnt, no_good_ingr_cnt = 0, 0
 
                 num_ingrs, num_ingrs_attempted = len(min_vp_heap_by_scored_ingr), 0
                 print("\t\t... ndef {}, num_ingrs {}".format(ndef, num_ingrs))
 
-                min_vp_heap_by_scored_ingr_dict = { ingr:mvph for _,ingr,mvph in min_vp_heap_by_scored_ingr }
+                # need set to look up ingresses when VP uses wrong ingress
+                ingr_set = set(ingr for _,ingr,_ in min_vp_heap_by_scored_ingr)
+
                 net_type, tag = ndef.split('_')
 
                 # favor rotating through different ingresses over retrying the same ingress
@@ -259,16 +262,16 @@ if __name__ == '__main__':
                             _, dist, dentry, ientry = test_metainfo_by_vp[min_vp]
                             test_ingr = eval('ientry.{}_{}'.format(net_type, tag))
 
-                            # TODO: make this case pass if the ingress used is in the list of test-ingresses for this VP
                             if ingr != test_ingr:
-                                if test_ingr in min_vp_heap_by_scored_ingr:
-                                    print("\t\t\t\t\t...used wrong ingress {} instead of {}, but that ingress IS in the ranking list with min-vp {}.. allowed.".format(
-                                        test_ingr, ingr, min_vp_heap_by_scored_ingr_dict[ingr][0]))
-                                #elif dist < 10:
-                                #    print("\t\t\t\t\t...used wrong ingress {} instead of {}, but this VP reached the dest!".format(test_ingr, ingr))
+                                if test_ingr in ingr_set:
+                                    print("\t\t\t\t\t...used wrong ingress {} instead of {}, but that ingress IS in the ranking list .. allowed.".format(test_ingr, ingr))
+                                elif dist < 10:
+                                    print("\t\t\t\t\t...used wrong ingress {} instead of {}, but this VP reached the dest .. allowed.".format(test_ingr, ingr))
                                 elif test_ingr == dest:
                                     print("\t\t\t\t\t...test ingress == destination, emulation incapable of succeeding, failure!")
                                     test_is_dest = True
+                                    vps_attempted.remove(min_vp)
+                                    pings, no_good_ingr_cnt = pings - 1, no_good_ingr_cnt + 1
                                     break
                                 else:
                                     #print("\t\t\t\t\t...used wrong ingress {} instead of {} --> rotate".format(
@@ -276,8 +279,8 @@ if __name__ == '__main__':
                                     print("\t\t\t\t\t...used wrong ingress {} instead of {}, and its not in the ranking list.. --> retry ingr".format(
                                         test_ingr, ingr))
                                     vps_attempted.remove(min_vp)
-                                    #pings, wrong_ingr_cnt = pings - 1, wrong_ingr_cnt + 1
-                                    wrong_ingr_cnt = wrong_ingr_cnt + 1
+                                    pings, wrong_ingr_cnt = pings - 1, wrong_ingr_cnt + 1
+                                    #wrong_ingr_cnt = wrong_ingr_cnt + 1
                                     #break # rotate ingrs
                                     continue # retry ingr
 
@@ -297,6 +300,7 @@ if __name__ == '__main__':
                     vp_chosen_by_ndef[ndef], num_hops_by_ndef[ndef], num_pings_by_ndef[ndef] = '', '', pings
 
                 print("\t\t...a wrong ingress was attempted {} times!".format(wrong_ingr_cnt))
+                print("\t\t...no good ingress was possible {} times!".format(no_good_ingr_cnt))
 
             # write the results out to corresponding files
             for net_type in ['asn','bgp','s24']:
