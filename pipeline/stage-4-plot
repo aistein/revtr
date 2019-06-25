@@ -196,13 +196,13 @@ def main():
         dest = plt.bar(ind+3*width/2, multi_bar_graph_stats[type_index][2][1:11], width=width, color='b', align='center')
         plt.ylabel('# Destinations RR-Reachable')
         plt.xlabel('# Hops')
-        plt.title('Ranked VP Distance from Destination ('+plot_type+')')
+        # plt.title('Ranked VP Distance from Destination ('+plot_type+')')
         plt.xticks(ind, ('1','2','3','4','5','6','7','8','9','>9'))
         if IGNORE_BLACKLIST:
             plt.yticks(np.arange(0,65000,5000))
         else:
             plt.yticks(np.arange(0,6000,500)) # without blacklisted VPs
-        plt.legend((opt, topk, dest, ingrfi, ingrfo), ('Optimal VP', 'Top K', 'Destination Cover', 'Ingress Cover-FI', 'Ingress Cover-FO'))
+        plt.legend((opt, ingrfi, ingrfo, topk, dest), ('Optimal VP', 'Ingress Score-FI', 'Ingress Score-FO', 'Top K', 'Destination Cover'))
         plt.savefig('ranked_vp_distance_from_destination-'+plot_type+'.png')
         plt.clf()
         

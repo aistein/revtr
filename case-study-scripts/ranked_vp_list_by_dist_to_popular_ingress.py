@@ -6,8 +6,9 @@ import json
 from collections import defaultdict
 
 #pop_dir = '/data/workspace/data/popularity'
-pop_dir = '/data/workspace/data/4_19_2019/popularity'
-target_prefix = '209.58.192.0/19'
+pop_dir = '/data/workspace/data/4_19_2019/train_results/popularity'
+#target_prefix = '209.58.192.0/19'
+target_prefix = '180.69.0.0/16'
 
 pop_weight, vpd_weight = 0.5, 1.5
 assert(pop_weight + vpd_weight == 2.0)

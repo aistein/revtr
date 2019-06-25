@@ -13,7 +13,8 @@ DnetEntry = namedtuple('DnetEntry',['asn','bgp','s24'])
 vp_dir = '/data/workspace/data/4_19_2019/train/vp_measurements/annotated/all'
 ipasnfile = '/data/workspace/bgpdumps/ipasn20181203.dat'
 #target_prefix = '209.58.192.0/19'
-target_prefix = '88.176.0.0/12'
+#target_prefix = '88.176.0.0/12'
+target_prefix = '180.69.0.0/16'
 
 ipasn = pyasn.pyasn(ipasnfile)
 
