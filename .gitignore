@@ -1,8 +1,13 @@
 __pycache__/
+tmp/
 logs/
 data/
 bgpdumps/
 automated_case_studies/
 results/
+popularity_test/
 pipeline/configurations/credentials.yml
 *.log
+*.png
+*.csv
+*.backup

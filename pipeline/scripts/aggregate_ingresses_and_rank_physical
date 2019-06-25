@@ -1,7 +1,10 @@
-#! /usr/local/bin/python3
-import sys
+#! /usr/bin/python3 -u
+import sys, os
 import pickle
+import heapq
 import json
+import csv
+from collections import defaultdict
 
 def min_vp_per_ingr(dists_by_vp_by_ingr):
     min_vp_by_ingr = {}
@@ -15,23 +18,111 @@ def min_vp_per_ingr(dists_by_vp_by_ingr):
         min_vp_by_ingr[ingr] = min_vp
     return min_vp_by_ingr
 
+def min_vp_heap_per_ingr(dists_by_vp_by_ingr_by_ndef):
+    min_vp_heap_by_ingr_by_ndef = {}
+    for ndef, dists_by_vp_by_ingr in dists_by_vp_by_ingr_by_ndef.items():
+        if ndef not in min_vp_heap_by_ingr_by_ndef:
+            min_vp_heap_by_ingr_by_ndef[ndef] = {}
+        for ingr, dists_by_vp in dists_by_vp_by_ingr.items():
+            min_heap = []
+            for vp, dists in dists_by_vp.items():
+                heapq.heappush(min_heap, (min(dists), vp))
+            min_vp_heap_by_ingr_by_ndef[ndef][ingr] = min_heap
+    return min_vp_heap_by_ingr_by_ndef
+
+def sort_by_ingr_score_per_ndef( min_vp_heap_by_ingr_by_ndef, score_by_ingr_by_ndef ):
+
+    def ndef_tuple_of(ndef):
+        ntype, nloc = ndef.split("_")
+        nloc = 'first-inside' if nloc == 'fi' else 'first-outside'
+        return (nloc, ntype)
+
+    pop_weight, vpd_weight = 0.5, 1.5
+    #pop_weight, vpd_weight = 1.0, 1.0
+    #ordered = {}
+    min_vp_heap_by_scored_ingr_by_ndef = {}
+    assert(pop_weight + vpd_weight == 2.0)
+    for ndef in min_vp_heap_by_ingr_by_ndef:
+        max_ingr_heap = []
+        # ndef format for min_vp_heap is "asn_fi", but for score_by_ingr it is ('first-inside', 'asn')
+        ndt = ndef_tuple_of(ndef)
+        print("ndef {}:".format(ndt))
+        for ingr, min_vp_heap in min_vp_heap_by_ingr_by_ndef[ndef].items():
+            min_dist_norm = (10.0 - min_vp_heap[0][0]) / 10.0
+            print("\tingr {}\n\t\tpopularity-score {}\n\t\tdistance-score {}:".format(ingr,
+                score_by_ingr_by_ndef[ndt][ingr], min_dist_norm))
+            score = score_by_ingr_by_ndef[ndt][ingr] = -0.5 * (pop_weight * score_by_ingr_by_ndef[ndt][ingr] + vpd_weight * min_dist_norm)
+            print("\t\taggregate-score {}\n\t\tmin_vp {}".format(score, min_vp_heap[0][1]))
+            heapq.heappush(max_ingr_heap, (score, ingr, min_vp_heap))
+        min_vp_heap_by_scored_ingr_by_ndef[ndef] = max_ingr_heap
+        #for ingr, min_vp_heap in sorted(min_vp_heap_by_ingr_by_ndef[ndef].items(),
+        #        key=lambda tup: -score_by_ingr_by_ndef[ndef][tup[0]]):
+        #    if ndef not in ordered:
+        #        ordered[ndef] = {}
+        #    ordered[ndef][ingr] = min_vp_heap
+    #return ordered
+    return min_vp_heap_by_scored_ingr_by_ndef
+
+
 if __name__ == '__main__':
 
-    dists_by_vp_by_ingr_by_dnet = None
+    dists_by_vp_by_ingr_by_ndef_by_dprefix = None
 
-    if len(sys.argv) < 3:
-        exit('usage: aggregate_ingresses_and_rank_physical <dists_by_vp_by_ingr_by_dnet>.json <ingr_rankings_out>.csv')
+    if len(sys.argv) < 4:
+        exit('usage: aggregate_ingresses_and_rank_physical <dists_by_vp_by_ingr_by_ndef_by_dprefix>.pkl <popularity-score-directory> <ingr_rankings_out>.pkl')
 
+
+    print("-I- rank_ingress_cover: loading json file...")
     with open(sys.argv[1], 'r') as f:
-        dists_by_vp_by_ingr_by_dnet = json.loads(f.read())
+        dists_by_vp_by_ingr_by_ndef_by_dprefix = json.load(f)
 
-    min_vp_by_ingr_by_dnet = {}
-    with open(sys.argv[2], 'w+') as f:
-        for dnet in dists_by_vp_by_ingr_by_dnet:
-            min_vp_by_ingr = min_vp_per_ingr(dists_by_vp_by_ingr_by_dnet[dnet])
-            min_vp_by_ingr_by_dnet[dnet] = min_vp_by_ingr
-            ranked_vps = []
-            for vp in min_vp_by_ingr.values():
-                if vp not in ranked_vps:
-                    ranked_vps.append(vp)
-            f.write("{},{}\n".format(dnet, ','.join(ranked_vps)))
+    print("-I- rank_ingress_cover: loading ingress popularity scores...")
+    pop_dir = sys.argv[2]
+    score_by_ingr_by_ndef_by_dprefix = defaultdict(
+            lambda: defaultdict(
+            lambda: defaultdict(float)))
+    for vpcsv in os.listdir(pop_dir):
+        vpname = vpcsv.replace('-ingr_counts.csv','')
+        print(vpname)
+        if 'popularity' in vpcsv:
+            continue
+        with open(os.path.join(pop_dir, vpcsv), 'r') as f:
+            r = csv.reader(f, delimiter=',')
+            for ingr_entry in r:
+                dprefix, nloc, ntype, ingr, cnt = ingr_entry[1:]
+                ndef = (nloc, ntype)
+                #if ingr is not None:
+                if dprefix != '' and ingr != 'None':
+                    score_by_ingr_by_ndef_by_dprefix[dprefix][ndef][ingr] = max(
+                            score_by_ingr_by_ndef_by_dprefix[dprefix][ndef][ingr],
+                            float(cnt))
+
+    # normalize the score for each ingress by the max raw score seen over all <VP, prefix> tuples
+    print("-I- rank_ingress_cover: normalizing scores...")
+    for dprefix, score_by_ingr_by_ndef in score_by_ingr_by_ndef_by_dprefix.items():
+        if dprefix != '':
+            max_by_ndef = { ndef:max(
+                [score for ingr, score in score_by_ingr_by_ndef[ndef].items() if ingr != 'None'])
+                    for ndef in score_by_ingr_by_ndef }
+            print("\tfor dprefix {}, max raw popularities by ndef: {}".format(dprefix, max_by_ndef))
+            for ndef in score_by_ingr_by_ndef:
+                print("\t\tnormalized ingr scores for ndef {}:".format(ndef))
+                for ingr in score_by_ingr_by_ndef[ndef]:
+                    print("\t\t\tingr {}:\n\t\t\t\traw_score {}".format(ingr, score_by_ingr_by_ndef[ndef][ingr]))
+                    score_by_ingr_by_ndef[ndef][ingr] /= max_by_ndef[ndef]
+                    print("\t\t\t\tnorm_score {}".format(score_by_ingr_by_ndef[ndef][ingr]))
+            score_by_ingr_by_ndef_by_dprefix[dprefix] = score_by_ingr_by_ndef
+
+
+    print("-I- rank_ingress_cover: ranking VPs...")
+    min_vp_heap_by_scored_ingr_by_ndef_by_dprefix = {}
+    with open(sys.argv[3], 'wb') as pkl:
+        for dprefix, dists_by_vp_by_ingr_by_ndef in dists_by_vp_by_ingr_by_ndef_by_dprefix.items():
+            print("-I- rank_ingress_cover: ranking VPs for dprefix {}".format(dprefix))
+            min_vp_heap_by_ingr_by_ndef = min_vp_heap_per_ingr(dists_by_vp_by_ingr_by_ndef)
+            
+            print("-I- Scoring ingresses for dprefix {}".format(dprefix))
+            min_vp_heap_by_scored_ingr_by_ndef = sort_by_ingr_score_per_ndef( min_vp_heap_by_ingr_by_ndef, score_by_ingr_by_ndef_by_dprefix[dprefix] )
+
+            min_vp_heap_by_scored_ingr_by_ndef_by_dprefix[dprefix] = min_vp_heap_by_scored_ingr_by_ndef
+        pickle.dump(min_vp_heap_by_scored_ingr_by_ndef_by_dprefix, pkl, pickle.HIGHEST_PROTOCOL)

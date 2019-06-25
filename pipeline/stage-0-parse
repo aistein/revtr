@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#! /usr/bin/python3 -u
 
 # stage-0-parse.py
 # - parse all VP CSV files, one-by-one from the online source
@@ -33,12 +33,12 @@ from bs4 import BeautifulSoup
 
 try:
     credfile = open("./pipeline/configurations/credentials.yml", 'r')
-    configfile = open("./pipeline/configurations/revtr.map_and_split.config.yml", 'r')
+    configfile = open("./pipeline/configurations/stage-0-parse.yml", 'r')
     configurations = {**yaml.load(credfile), **yaml.load(configfile)}
     credfile.close()
     configfile.close()
 except (FileNotFoundError,IndexError):
-    raise ValueError('error: config.yml or credentials.yml files either not found or incorrect.')
+    raise ValueError('error: stage-0-parse.yml or credentials.yml files either not found or incorrect.')
 
 # flag indicating if the measurement files need to be downloaded or if they are stored locally
 download = configurations['download']

@@ -1,0 +1,20 @@
+#! /bin/bash
+
+# run emulation for each DNET definition
+if [ $# -lt 5 ]; then
+    echo "usage: ./stage-3-test <annotated_test_dir> <rankings_dir> <K> <ipasn_file> <output_dir>" && exit 1
+fi
+
+annotated_test_dir=$1
+rankings_dir=$2
+K=$3
+ipasn_file=$4
+output_dir=$5
+
+if [ ! -d $output_dir ]; then
+    mkdir $output_dir
+fi
+
+scripts=$(pwd)/pipeline/scripts
+$scripts/calc_algo_stats $annotated_test_dir/all $rankings_dir $K $output_dir &
+echo "done with calc_algo_stats."

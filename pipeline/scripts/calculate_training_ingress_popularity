@@ -1,0 +1,250 @@
+#! /usr/bin/python3 -u
+
+"""
+Generate a CDF of how commonly a VP uses its most popular ingress into a
+bgp-prefix.  
+
+In one pass over the raw VP data, for each <VP, prefix> build a list of 
+<ingress, count> tuples.  At the end, do another pass to output for each
+<VP, prefix> the (highest_count/ total_count)
+"""
+
+import sys, os
+import csv
+import pyasn
+import multiprocessing as mp
+import matplotlib.pyplot as plt
+import numpy as np
+from collections import defaultdict
+from lookup_dnet import dnets_of, DnetEntry
+
+# given a bgp prefix, return the class (small, medium, large) it falls in
+def prefix_class(vp, prefix):
+    #print("{},{}".format(vp,prefix))
+    if prefix != 'None':
+        prefix_length = int(prefix.split('/')[1])
+        if prefix_length <= 12: # /12 or lower
+            return 'large'
+        if prefix_length <= 22: # /12 < l <= /22
+            return 'medium'
+        return 'small' # /22 < l
+    return None
+
+# given a ping probe, return (six) ingresses for all definitions:
+# - first, by 'asn / bgp / s24' of the destination
+# - then, by 'first-inside' or 'first-outside' for each dnet_type above
+def ingr_lookup(probe, ipasn):
+    dest, hops = probe[3], probe[4:]
+    fi = {'asn':None, 'bgp':None, 's24':None}
+    fo = {'asn':None, 'bgp':None, 's24':None}
+    dest_dentry = dnets_of(dest, ipasn)
+    #print('dest_dentry: {}'.format(dest_dentry))
+    hop_dentries = [dnets_of(hop, ipasn) for hop in hops]
+    #print('hop_dentries: {}'.format(hop_dentries))
+    prev_hop = None
+    type_found = {'asn':False, 'bgp':False, 's24':False}
+    for i, hop in enumerate(hops):
+        if all( found for found in type_found.values() ):
+            break
+        hop_dentry = hop_dentries[i]
+        for dnet_type in ['asn', 'bgp', 's24']:
+            if not type_found[dnet_type]:
+                dest_dnet = eval('dest_dentry.{}'.format(dnet_type))
+                hop_dnet = eval('hop_dentry.{}'.format(dnet_type))
+                if dest_dnet == hop_dnet:
+                    fi[dnet_type] = hop
+                    fo[dnet_type] = prev_hop
+                    type_found[dnet_type] = True
+        prev_hop = hop
+
+    return fi, fo
+
+def producer(vp, probes, q, ipasn):
+    for probe in probes:
+        vpt = (vpname, dnets_of(probe[3], ipasn).bgp)
+        fi, fo = ingr_lookup(probe, ipasn)
+        q.put((vpt, fi, fo))
+
+    return
+
+def consumer(vp, q, outdir):
+    count_by_ingr_by_tdef_by_ldef_by_vpt = defaultdict( #vpt
+            lambda: defaultdict( # ldef
+            lambda: defaultdict( # tdef
+            lambda: defaultdict( int ))))# ingr<-->int
+
+    while True:
+        m = q.get()
+        if m == 'kill':
+            print('consumer {} quitting...'.format(os.getpid()))
+            break
+        vpt, fi, fo = m
+        for tdef in ['asn','bgp','s24']:
+            ingrfi, ingrfo = fi[tdef], fo[tdef]
+            count_by_ingr_by_tdef_by_ldef_by_vpt[vpt]['first-inside'][tdef][ingrfi] += 1
+            count_by_ingr_by_tdef_by_ldef_by_vpt[vpt]['first-outside'][tdef][ingrfo] += 1
+
+    with open(os.path.join(outdir,vp+'-ingr_counts.csv'), 'w') as f:
+        for vpt, count_by_ingr_by_tdef_by_ldef in count_by_ingr_by_tdef_by_ldef_by_vpt.items():
+            for ldef, count_by_ingr_by_tdef in count_by_ingr_by_tdef_by_ldef.items():
+                for tdef, count_by_ingr in count_by_ingr_by_tdef.items():
+                    for ingr, count in count_by_ingr.items():
+                        f.write('{},{},{},{},{},{}\n'.format(vpt[0],vpt[1],ldef,tdef,ingr,count))
+
+    return
+
+
+
+
+
+
+
+
+if __name__ == '__main__':
+
+    try:
+        vp_dir = sys.argv[1]
+        output_dir = sys.argv[2]
+        ipasnfile = sys.argv[3]
+        do_mapping = True if sys.argv[4] == 'True' else False
+        ipasn = pyasn.pyasn(ipasnfile)
+    except:
+        exit("usage: ./calculate_training_ingress_popularity <unannotated-train-probe-dir> <output-dir> <bgp-dump-file> <do-mapping>")
+
+    if do_mapping:
+        manager = mp.Manager()
+        q = manager.Queue()
+
+        for vpcsv in os.listdir(vp_dir):
+
+            vpname = vpcsv.replace('.csv','')
+            print("-I- popularity_calculator: processing vp {}".format(vpname))
+
+            with open(os.path.join(vp_dir, vpcsv), 'r') as f:
+                data = [probe for probe in csv.reader(f)]
+
+            num_processes = (2 * 16) // 3
+            num_producers = num_processes - 1
+            chunksize, leftover = len(data) // num_producers, len(data) % num_producers
+            left, to_deploy = leftover, num_producers
+
+            with mp.Pool(processes=num_processes) as pool:
+                producers = []
+            
+                print("Creating Producers...")
+                tot = 0
+                if leftover:
+                    probes = data[0:left]
+                    tot += len(probes)
+                    p = mp.Process(target=producer, args=(vpname, probes, q, ipasn))
+                    producers.append(p)
+                    to_deploy -= 1
+                for i in range(to_deploy):
+                    probes = data[left:left+chunksize]
+                    tot += len(probes)
+                    p = mp.Process(target=producer, args=(vpname, probes, q, ipasn))
+                    producers.append(p)
+                    left += chunksize
+
+                print("Creating Consumer...")
+                writer = mp.Process(target=consumer, args=(vpname, q, output_dir))
+
+                print("Starting Processes...")
+                for p in producers:
+                    p.start()
+                writer.start()
+
+                print("Expecting {} entries in CSV file".format(6*tot))
+                
+                print("Wating for Processes to Finish...")
+                for p in producers:
+                    p.join()
+                q.put('kill')
+                writer.join()
+
+            print("-I- popularity_cdf: done processing vp {}".format(vpname))
+
+        ### SINGLE-CORE VERSION ###
+        #for vpcsv in os.listdir(vp_dir):
+        #    vpname = vpcsv.replace('.csv','')
+        #    with open(os.path.join(vp_dir, vpcsv), 'r') as f:
+        #        r = csv.reader(f, delimiter=',')
+        #        for probe in r:
+        #            vpt = (vpname, dnets_of(probe[0], ipasn).bgp)
+        #            fi, fo = ingr_lookup(probe, ipasn)
+        #            print('vpt: {}'.format(vpt))
+        #            print('hops: {}'.format(probe[1:]))
+        #            print('ingrs-fi: {}'.format(fi))
+        #            print('ingrs-fo: {}\n'.format(fo))
+        #            for tdef in ['asn','bgp','s24']:
+        #                ingrfi, ingrfo = fi[tdef], fo[tdef]
+        #                count_by_ingr_by_tdef_by_ldef_by_vpt[vpt]['first-inside'][tdef][ingrfi] += 1
+        #                count_by_ingr_by_tdef_by_ldef_by_vpt[vpt]['first-outside'][tdef][ingrfo] += 1
+
+    count_by_ingr_by_tdef_by_ldef_by_vpt = defaultdict( #vpt
+            lambda: defaultdict( # ldef
+            lambda: defaultdict( # tdef
+            lambda: defaultdict( int ))))# ingr<-->int
+    popularity_by_vpt_by_ldef_by_tdef = defaultdict( # tdef
+            lambda: defaultdict( # ldef
+            lambda: defaultdict( float ))) # vpt <--> popularity (score)
+
+    if not os.path.exists(os.path.join(output_dir,'popularity_scores.csv')):
+
+        # Load the ingress counts from mapped CSV files
+        # - tdef = 'asn/bgp/s24' ingress def
+        # - ldef = 'first inside/outside' ingress def
+        # - vpt = 'VP:prefix' tuple
+        print("-I- Loading mapped data...")
+        for vpcsv in os.listdir(output_dir):
+            print("\tLoading mapped data for VP {}".format(vpcsv))
+            with open(os.path.join(output_dir,vpcsv), 'r') as f:
+                r = csv.reader(f, delimiter=',')
+                for entry in r:
+                    vp, prefix, ldef, tdef, ingr, count = entry
+                    vpt = (vp, prefix)
+                    count_by_ingr_by_tdef_by_ldef_by_vpt[vpt][ldef][tdef][ingr] = int(count)
+        print("-I- Done loading mapped data.")
+
+        # Calculate Popularity Ratios
+        print("-I- Calculating popularity scores...")
+        cumulative_ones_cnt, cumulative_cnt, ones_samples, n_samples = 0, 0, 0, 0
+        with open(os.path.join(output_dir,'popularity_scores.csv'), 'w') as f:
+            for vpt, count_by_ingr_by_tdef_by_ldef in count_by_ingr_by_tdef_by_ldef_by_vpt.items():
+                if vpt[1] == '': # pass if bgp-prefix lookup failed
+                    continue
+                print("\tScoring VPT {}...".format(vpt))
+                for ldef in ['first-inside','first-outside']:
+                    for tdef in ['asn','bgp','s24']:
+                        max_ingr, max_count, total_count = '', 0, 0
+                        for ingr, count in count_by_ingr_by_tdef_by_ldef[ldef][tdef].items():
+                            if count > max_count:
+                                max_ingr, max_count = ingr, count
+                            total_count += count
+                        size = prefix_class(*vpt)
+                        pscore = max_count / total_count
+                        f.write("{},{},{},{},{},{},{}\n".format(
+                            vpt[0], vpt[1], ldef, tdef, max_count, total_count, pscore))
+                        popularity_by_vpt_by_ldef_by_tdef[tdef][ldef][vpt] = pscore 
+                        if pscore == 1.0: 
+                            cumulative_ones_cnt += total_count
+                            ones_samples += 1
+                        cumulative_cnt, n_samples = cumulative_cnt + total_count, n_samples + 1
+        print("Avg #-Measurements when pscore is perfect: {}".format( cumulative_ones_cnt / ones_samples ))
+        print("Avg #-Measurements over all pscore calculations: {}".format( cumulative_cnt / total_count ))
+
+    else: # popularity_scores.csv already exists
+        
+        print("-I- loading popularity_scores.csv ...")
+        cumulative_ones_cnt, cumulative_cnt, ones_samples, n_samples = 0, 0, 0, 0
+        with open(os.path.join(output_dir,'popularity_scores.csv'), 'r') as f:
+            r = csv.reader(f, delimiter=',')
+            for entry in r:
+                vp, prefix, ldef, tdef, max_cnt, total_cnt, pscore = entry
+                popularity_by_vpt_by_ldef_by_tdef[tdef][ldef][(vp,prefix)] = float(pscore)
+                if float(pscore) == 1.0: 
+                    cumulative_ones_cnt += int(total_cnt)
+                    ones_samples += 1
+                cumulative_cnt, n_samples = cumulative_cnt + int(total_cnt), n_samples + 1
+        print("Avg #-Measurements when pscore is perfect: {}".format( cumulative_ones_cnt / ones_samples ))
+        print("Avg #-Measurements over all pscore calculations: {}".format( cumulative_cnt / n_samples ))

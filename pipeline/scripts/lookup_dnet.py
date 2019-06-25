@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#! /usr/bin/python3 -u
 
 import pyasn
 import sys
@@ -11,7 +11,10 @@ def s24_of(target_ip):
     return ".".join(octets[:3]) + ".0/24"
 
 def dnets_of(target_ip, ipasn):
-    return DnetEntry(*(ipasn.lookup(target_ip)), s24_of(target_ip))
+    try:
+        return DnetEntry(*(ipasn.lookup(target_ip)), s24_of(target_ip))
+    except:
+        return DnetEntry('','', s24_of(target_ip))
 
 if __name__ == '__main__':
     try:

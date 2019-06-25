@@ -1,8 +1,13 @@
-#! /usr/bin/python3
+#! /usr/bin/python3 -u
 
 import sys
 import os
 import csv
+
+"""
+expected format of a single line from input CSV:
+    asn, bgp, s24, dest-ip, hop1, hop2, hop3, hop, hop5, hop6, hop7, hop8, hop9
+"""
 
 if len(sys.argv) < 3:
     exit('Usage: annotate_probes <rr_probe_dir> <output_dir>')
@@ -15,12 +20,8 @@ os.makedirs(output_dir, exist_ok=True)
 for vp_csv in os.listdir(probe_dir):
     with open(os.path.join(probe_dir, vp_csv), 'r') as f, open(os.path.join(output_dir, vp_csv), 'w+') as g:
         for row in csv.reader(f):
-            dnet = row[0]
-            dest = row[1]
-            hops = row[2:]
-            if dest in hops:
-                dist = hops.index(dest) + 1
-                g.write('{},{},{},{}\n'.format(dnet, dest, dist, ','.join(hops)))
-            else:
-                dist = 10
-                g.write('{},{},{},{}\n'.format(dnet, dest, dist, ','.join(hops)))
+            asn, bgp, s24 = row[0:3]
+            dest = row[3]
+            hops = row[4:]
+            dist = hops.index(dest) + 1 if dest in hops else 10
+            g.write('{},{},{},{},{},{}\n'.format(asn, bgp, s24, dest, dist, ','.join(hops)))

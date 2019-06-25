@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#! /usr/bin/python3 -u
 
 # stage-1-split.py
 # -------------------
@@ -45,11 +45,11 @@ from scripts.lookup_dnet import dnets_of
 #==========================================================
 
 try:
-    configfile = open("./pipeline/configurations/revtr.map_and_split.config.yml", 'r')
+    configfile = open("./pipeline/configurations/stage-1-split.yml", 'r')
     configurations = yaml.load(configfile)
     configfile.close()
 except (FileNotFoundError,IndexError):
-    exit('error: config.yml either not found or incorrect.')
+    exit('error: stage-1-split.yml either not found or incorrect.')
 
 
 # flag indicating if the measurement files need to be downloaded or if they are stored locally

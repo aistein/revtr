@@ -1,16 +1,20 @@
-#! /usr/bin/python3
+#! /usr/bin/python3 -u
 
 import os
 import sys
 import csv
 from collections import defaultdict
+from collections import namedtuple
 import pickle
 
-if len(sys.argv) != 3:
-    exit('Usage: rank_vps_destination_cover <dsts_by_dnet_file> <train_dir>')
+DnetEntry = namedtuple('DnetEntry', ['asn','bgp','s24'])
+
+if len(sys.argv) != 4:
+    exit('Usage: rank_vps_destination_cover <dsts_by_dnet_file> <train_dir> <output_file>')
 
 dsts_by_dnet_file = sys.argv[1]
 train_dir  = sys.argv[2]
+output_file = sys.argv[3]
 
 with open(dsts_by_dnet_file, 'rb') as f:
     dsts_by_dnet = pickle.load(f)
@@ -18,33 +22,39 @@ with open(dsts_by_dnet_file, 'rb') as f:
 dsts_by_vp_by_dnet = defaultdict(lambda: defaultdict(set))
 for vp_csv in os.listdir(train_dir):
     vp = vp_csv.replace('.csv', '')
+    print("-I- rank_destination_cover: reading csv for VP {}".format(vp))
     with open(os.path.join(train_dir, vp_csv), 'r') as f:
+        next(f) # skip header line
         for row in csv.reader(f):
-            dnet = row[0]
-            dst  = row[1]
-            hops = row[2:]
+            dentry = DnetEntry(*row[0:3])
+            dst  = row[3]
+            hops = row[4:]
             if dst in hops:
-                dsts_by_vp_by_dnet[dnet][vp].add(dst)
+                for dnet in [dentry.asn, dentry.bgp, dentry.s24]:
+                    dsts_by_vp_by_dnet[dnet][vp].add(dst)
+print("-I- rank_destination_cover: done reading in dsts_by_vp_by_dnet pickle.")
 
-for dnet, remaining_dsts in dsts_by_dnet.items():
+with open(output_file, 'w') as f:
+    for dnet, remaining_dsts in dsts_by_dnet.items():
+        print("-I- rank_destination_cover: finding best VPs for dnet {}".format(dnet))
 
-    vp_ranking = []
-    while(len(remaining_dsts) > 0):
+        vp_ranking = []
+        while(len(remaining_dsts) > 0):
 
-        max_coverage = 0
-        chosen_vp = ''
-        for vp, covered_dsts in dsts_by_vp_by_dnet[dnet].items():
-
-            this_coverage = len(covered_dsts & remaining_dsts)
-
-            if this_coverage > max_coverage:
-                chosen_vp = vp
-                chosen_dsts = covered_dsts
-                max_coverage = this_coverage
-
-        vp_ranking.append(chosen_vp)
-        remaining_dsts -= chosen_dsts
-
-        del dsts_by_vp_by_dnet[dnet][chosen_vp]
-
-    print('{},{}'.format(dnet, ','.join(vp_ranking)))
+            max_coverage = 0
+            chosen_vp = ''
+            for vp, covered_dsts in dsts_by_vp_by_dnet[dnet].items():
+    
+                this_coverage = len(covered_dsts & remaining_dsts)
+    
+                if this_coverage > max_coverage:
+                    chosen_vp = vp
+                    chosen_dsts = covered_dsts
+                    max_coverage = this_coverage
+    
+            vp_ranking.append(chosen_vp)
+            remaining_dsts -= chosen_dsts
+    
+            del dsts_by_vp_by_dnet[dnet][chosen_vp]
+    
+        f.write('{},{}\n'.format(dnet, ','.join(vp_ranking)))

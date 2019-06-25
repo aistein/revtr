@@ -1,3 +1,8 @@
 sliceinfo/
 collections/
+survey/
+print_datafile/
 dummy*
+*.log
+*.txt
+*.json

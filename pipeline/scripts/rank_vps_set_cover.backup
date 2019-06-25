@@ -6,7 +6,7 @@ import os
 from collections import defaultdict
 
 if len(sys.argv) < 2:
-    exit("Usage: rank_vps_set_cover <training-rr_probe_dir>")
+    exit("Usage: rank_vps_set_cover <unannotated rr_probe_dir>")
 
 rr_probe_dir = os.path.abspath(sys.argv[1])
 
@@ -15,10 +15,9 @@ reachables_by_vp = defaultdict(set)
 for vp_csv in os.listdir(rr_probe_dir):
     vp_name = vp_csv.replace('.csv', '')
     with open(os.path.join(rr_probe_dir, vp_csv), 'r') as f:
-        next(f) # skip header line
         for row in csv.reader(f):
-            d = row[3]
-            if d in row[4:]:
+            d = row[0]
+            if d in row[1:]:
                 reachables_by_vp[vp_name].add(d)
                 uncovered_reachables.add(d)
 

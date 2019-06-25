@@ -1,29 +1,353 @@
-#! /bin/bash
+#! /usr/bin/python3 -u
+import os
+import sys
+import csv
+import copy
+import pyasn
+import pickle
+import heapq
+import yaml
+import json
+import random
+from ipaddress import ip_network
+from collections import defaultdict
+from collections import namedtuple
 
-# -- Moved Annotation into Stage 1.5 --
-# annotate probes with 3 entries at front: <DNET>, <DETS>, <DIST>, ...
-#./scripts/annotate_probes <original_probe_dir>/s24 <target_dir_for_annotated_probes>/s24
-#./scripts/annotate_probes <original_probe_dir>/asn <target_dir_for_annotated_probes>/asn
-#./scripts/annotate_probes <original_probe_dir>/prefix <target_dir_for_annotated_probes>/bgp
+DnetEntry = namedtuple('DnetEntry',['asn','bgp','s24'])
+IngrEntry = namedtuple('IngrEntry', ['asn_fi','asn_fo','bgp_fi','bgp_fo','s24_fi','s24_fo'])
+VpdMetaInfo = namedtuple('VpdMetaInfo', ['vp','dist','dentry','ientry'])
 
-# run emulation for each DNET definition
-if [ $# -lt 5 ]; then
-    echo "usage: ./stage-3-test <annotated_test_dir> <rankings_dir> <K> <ipasn_file> <output_dir>" && exit 1
-fi
+def slash_24_of(ip_str):
+    dots = ip_str.strip().split('.')
+    dots[-1] = '0/24'
+    return '.'.join(dots)
 
-annotated_test_dir=$1
-rankings_dir=$2
-K=$3
-ipasn_file=$4
-output_dir=$5
+def bgp_prfx_of(ip_str, bgpdb):
+    try:
+        _, prfx = bgpdb.lookup(ip_str)
+    except:
+        return ''
+    return prfx
 
-if [ ! -d $output_dir ]; then
-    mkdir $output_dir
-fi
+def asn_of(ip_str, bgpdb):
+    try:
+        asn, _ = bgpdb.lookup(ip_str)
+    except:
+        return ''
+    return str(asn)
 
-scripts=$(pwd)/pipeline/scripts
-#$scripts/calc_algo_stats $annotated_test_dir/s24 $rankings_dir $K s24 $ipasn_file &> $output_dir/s24_res.csv &
-#$scripts/calc_algo_stats $annotated_test_dir/asn $rankings_dir $K asn $ipasn_file &> $output_dir/asn_res.csv &
-$scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K s24 $ipasn_file &> $output_dir/s24_res.csv &
-$scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K asn $ipasn_file &> $output_dir/asn_res.csv &
-$scripts/calc_algo_stats $annotated_test_dir/prefix $rankings_dir $K bgp $ipasn_file &> $output_dir/bgp_res.csv &
+def net_lookup(ip, net_type, ipasn):
+    if net_type == 's24':
+        return slash_24_of(ip)
+    if net_type == 'bgp':
+        return bgp_prfx_of(ip, ipasn)
+    return asn_of(ip, ipasn)
+
+def ingr_lookup(dest, hops, ipasn):
+    retarr = []
+    for tdef in ['asn','bgp','s24']:
+        dnet = net_lookup(dest, tdef, ipasn)
+        fi, fo = '', ''
+        for i, h in enumerate(hops):
+            if net_lookup(h, tdef, ipasn) == dnet:
+                fi , fo = h, hops[i-1] if i > 0 else fo
+                break
+        retarr.extend([fi, fo])
+    return retarr
+
+if __name__ == '__main__':
+
+    try:
+        configfile = open("./pipeline/configurations/stage-3-test.yml", 'r')
+        configurations = yaml.load(configfile, Loader=yaml.SafeLoader)
+        configfile.close()
+    except (FileNotFoundError, IndexError):
+        exit('error: stage-3-test.yml either not found or incorrect.')
+
+    test_dir = configurations['test_dir']
+    rankings_dir = configurations['rankings_dir']
+    output_dir = configurations['output_dir']
+    K = configurations['K']
+    num_vps = configurations['num_vps']
+    ipasnfile = configurations['ipasnfile']
+
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    vps_metainfo_by_dest = defaultdict(list)
+    if not os.path.exists(os.path.join(output_dir,'vps_metainfo_by_dest.pkl')):
+
+        ipasn = pyasn.pyasn(ipasnfile)
+
+        print("-I- stage-3-test: creating vps_metainfo_by_dest...")
+
+        for csv_name in os.listdir(test_dir):
+            vp = csv_name.replace('.csv', '')
+
+            print("... making metadata for VP {}".format(vp))
+
+            with open(os.path.join(test_dir, csv_name), 'r') as f:
+                next(f)
+                for row in csv.reader(f, delimiter=','):
+                    dentry = DnetEntry( *row[0:3] )
+                    dest = row[3]
+                    dist = int(row[4])
+                    hops = row[5:]
+                    ientry = IngrEntry( *ingr_lookup(dest, hops, ipasn) )
+                    meta = VpdMetaInfo( vp, dist, dentry, ientry )
+                    vps_metainfo_by_dest[dest].append( meta )
+        
+        with open(os.path.join(output_dir,'vps_metainfo_by_dest.pkl'), 'wb') as pkl:
+            pickle.dump(vps_metainfo_by_dest, pkl, pickle.HIGHEST_PROTOCOL)
+
+    else: # pkl for vps_metainfo_by_dest exists
+        print("-I- stage-3-test: loading vps_metainfo_by_dest...")
+        with open(os.path.join(output_dir,'vps_metainfo_by_dest.pkl'), 'rb') as f:
+            vps_metainfo_by_dest = pickle.load(f)
+
+    print("-I- stage-3-test: loading set_cover_rankings...")
+    set_cover_rankings = []
+    with open(os.path.join(rankings_dir, "set_cover_rankings.txt"), 'r') as f:
+        next(f) # skip the title line
+        for i, line in enumerate(f):
+            if K < i + 1: # stop after retrieving top-K VPs
+                break
+            set_cover_rankings.append(line.strip().split()[0])
+
+    print("-I- stage-3-test: loading ingress_cover_rankings...")
+    with open(os.path.join(rankings_dir,'ingress_cover','all','rankings_by_ndef_by_dprefix.pkl'), 'rb') as f:
+        min_vp_heap_by_scored_ingr_by_ndef_by_dprefix = pickle.load(f)
+
+    print("-I- stage-3-test: loading dest_cover_rankings...")
+    dst_rankings_by_dnet = {}
+    with open(os.path.join(rankings_dir, 'destination_cover','all','rankings_by_dnet.csv'), 'r') as f:
+        for row in csv.reader(f):
+            dst_rankings_by_dnet[row[0]] = row[1:]
+
+    header = '# <destination>,<dnet>,<optimal_vp>,<optimal_dist>,<set_vp>,<set_dist>,<set_pings>,<ingrfi_vp>,<ingrfi_dist>,<ingrfi_pings>,<ingrfo_vp>,<ingrfo_dist>,<ingrfo_pings>,<dest_vp>,<dest_dist>,<dest_pings>\n'
+    af = open(os.path.join(output_dir,'asn_res.csv'), 'w+')
+    bf = open(os.path.join(output_dir,'bgp_res.csv'), 'w+')
+    sf = open(os.path.join(output_dir,'s24_res.csv'), 'w+')
+    [eval('{}.write(header)'.format(fd)) for fd in ['af','bf','sf']]
+
+    for dest, vps_metainfo in vps_metainfo_by_dest.items():
+
+        opt = min( vps_metainfo, key=lambda m: m.dist if m.dist > 0 else 10 )
+        if opt.dist == 10:
+            continue # if the optimal VP couldn't reach, no point in recording algo results
+
+        print("running tests for destination {} ...".format(dest))
+
+        # metainfo of all VPs for which there exists a test measurement to this destination
+        test_metainfo_by_vp = { m.vp:m for m in vps_metainfo }
+        dnets = opt.dentry
+
+        for dnet_type in ['asn','bgp','s24']:
+            if dnet_type == 'asn':
+                af.write('{},{},{},{},'.format(dest, dnets.asn, opt.vp, opt.dist))
+            if dnet_type == 'bgp':
+                bf.write('{},{},{},{},'.format(dest, dnets.bgp, opt.vp, opt.dist))
+            if dnet_type == 's24':
+                sf.write('{},{},{},{},'.format(dest, dnets.s24, opt.vp, opt.dist))
+
+        print("\t-I- stage-3-test: testing set_cover...")
+        dists = { m.vp: m.dist for m in vps_metainfo }
+        found = False
+        for i, vp in enumerate(set_cover_rankings):
+            if vp in dists and dists[vp] < 10:
+                    writestr = '{},{},{},'.format(vp, dists[vp], i + 1)
+                    [eval('{}.write(writestr)'.format(fd)) for fd in ['af','bf','sf']]
+                    found = True
+                    break
+        if not found:
+            [eval('{}.write(\',,,\')'.format(fd)) for fd in ['af','bf','sf']]
+
+        print("\t-I- stage-3-test: testing ingress_cover...")
+        # There are N_i ingresses into destination network i. For each ingress,
+        # the ranking has a min-heap of VPs ordered by their distance to that
+        # ingress
+        ping_limit = 500
+        vp_chosen_by_ndef, num_hops_by_ndef, num_pings_by_ndef = {}, {}, {}
+
+        if dnets.bgp in min_vp_heap_by_scored_ingr_by_ndef_by_dprefix: 
+            #pings, found = 0, False
+            #vps_attempted, ingrs_banned = set(), set()
+            #wrong_ingr_cnt = 0
+
+            # need a fresh deepcopy for each new destination
+            min_vp_heap_by_scored_ingr_by_ndef = list(copy.deepcopy(min_vp_heap_by_scored_ingr_by_ndef_by_dprefix[dnets.bgp]).items())
+
+
+            for ndef, min_vp_heap_by_scored_ingr in min_vp_heap_by_scored_ingr_by_ndef:
+
+                pings, found, test_is_dest = 0, False, False
+                vps_attempted, ingrs_banned = set(), set()
+                wrong_ingr_cnt, no_good_ingr_cnt = 0, 0
+
+                num_ingrs, num_ingrs_attempted = len(min_vp_heap_by_scored_ingr), 0
+                print("\t\t... ndef {}, num_ingrs {}".format(ndef, num_ingrs))
+
+                # need set to look up ingresses when VP uses wrong ingress
+                ingr_set = set(ingr for _,ingr,_ in min_vp_heap_by_scored_ingr)
+
+                net_type, tag = ndef.split('_')
+
+                # favor rotating through different ingresses over retrying the same ingress
+                while not found and not test_is_dest and pings < ping_limit and len(vps_attempted) < num_vps:
+
+                    #if num_ingrs_attempted >= 2 * num_ingrs:
+                    #    print("\t\t\t... tried all ingrs twice, giving up :(")
+                    #    break # giving up
+                    if len(min_vp_heap_by_scored_ingr) == 0:
+                        print("\t\t\t... tried all ingresses, giving up :(")
+                        break
+
+                    ## pick ingrs randomly, continually removing bad VPs & ingresses
+                    #ingr, min_vp_heap = random.choice(min_vp_heap_by_scored_ingr)
+
+                    # ingrs are ordered by scoring heuristic, try them in order
+                    #for i in range(len(min_vp_heap_by_scored_ingr)):
+                    while min_vp_heap_by_scored_ingr:
+                        print("\t\t\t\t-I- current length of max_ingr_heap {}".format(len(min_vp_heap_by_scored_ingr)))
+
+                        if found or test_is_dest:
+                            break
+
+                        #ingr, min_vp_heap = min_vp_heap_by_scored_ingr[i]
+                        score, ingr, min_vp_heap = heapq.heappop(min_vp_heap_by_scored_ingr)
+                        num_ingrs_attempted += 1
+                        if len(min_vp_heap) == 0:
+                            ingrs_banned.add(ingr)
+                            continue
+
+                        if ingr in ingrs_banned:
+                            continue
+
+                        print("\t\t\t\t-I- Trying ingr {}, with score {}".format(ingr, score))
+                        print("\t\t\t\t... len(vps_attempted) {}, len(min_vp_heap) {}, pings {}".format(
+                            len(vps_attempted), len(min_vp_heap), pings))
+
+                        while min_vp_heap and pings < ping_limit:
+
+                            min_vp_dist_to_ingr, min_vp = heapq.heappop(min_vp_heap)
+
+                            # don't bother trying this ingress if
+                            # - the min_vp is > 9 hops from the (trained) ingress
+                            if min_vp_dist_to_ingr > 9:
+                                ingrs_banned.add(ingr)
+                                break # discard ingr
+
+                            # don't bother trying this vp if:
+                            # - it's already been tried for this destination
+                            if min_vp in vps_attempted:
+                                #break # rotate ingrs
+                                continue # try getting a new VP for this ingr
+
+                            pings += 1
+                            vps_attempted.add(min_vp)
+
+                            ## Try issuing a measurement now from this VP. Consider these cases:
+                            # 1) VP isn't RR-responsive --> immediately retry next VP for this ingress
+                            # 2) VP uses diff test-ingress vs. train-ingress --> rotate to next ingress
+                            # 3) VP is RR-responsive but too far away from test-ingr --> discard this ingress
+                            # 4) VP is RR-reachable --> record stats and move on to next ranking method!
+
+                            print("\t\t\t\t\t-I- Trying Min_VP {}, with train-dist {}".format(
+                                min_vp, min_vp_dist_to_ingr))
+
+                            if min_vp not in test_metainfo_by_vp:
+                                print("\t\t\t\t\t...not RR-responsive --> retry ingr")
+                                continue # retry ingr
+
+                            _, dist, dentry, ientry = test_metainfo_by_vp[min_vp]
+                            test_ingr = eval('ientry.{}_{}'.format(net_type, tag))
+
+                            if ingr != test_ingr:
+                                if test_ingr in ingr_set:
+                                    print("\t\t\t\t\t...used wrong ingress {} instead of {}, but that ingress IS in the ranking list .. allowed.".format(test_ingr, ingr))
+                                elif dist < 10:
+                                    print("\t\t\t\t\t...used wrong ingress {} instead of {}, but this VP reached the dest .. allowed.".format(test_ingr, ingr))
+                                elif test_ingr == dest:
+                                    print("\t\t\t\t\t...test ingress == destination, emulation incapable of succeeding, failure!")
+                                    test_is_dest = True
+                                    vps_attempted.remove(min_vp)
+                                    pings, no_good_ingr_cnt = pings - 1, no_good_ingr_cnt + 1
+                                    break
+                                else:
+                                    #print("\t\t\t\t\t...used wrong ingress {} instead of {} --> rotate".format(
+                                    #    test_ingr, ingr))
+                                    print("\t\t\t\t\t...used wrong ingress {} instead of {}, and its not in the ranking list.. --> retry ingr".format(
+                                        test_ingr, ingr))
+                                    vps_attempted.remove(min_vp)
+                                    pings, wrong_ingr_cnt = pings - 1, wrong_ingr_cnt + 1
+                                    #wrong_ingr_cnt = wrong_ingr_cnt + 1
+                                    #break # rotate ingrs
+                                    continue # retry ingr
+
+                            if dist == 10:
+                                print("\t\t\t\t\t...too far away --> remove ingr")
+                                ingrs_banned.add(ingr)
+                                break # discard ingr
+
+                            # Correct Ingress, RR-reachable
+                            vp_chosen_by_ndef[ndef], num_hops_by_ndef[ndef], num_pings_by_ndef[ndef] = min_vp, dist, pings
+                            print("\t\t\t\t\t...YekShamesh!")
+                            found = True
+                            break # (while) success - next ranking method!
+
+                # ZERO of the N pings tried produced a successful RR-reachable measurement!
+                if not found:
+                    vp_chosen_by_ndef[ndef], num_hops_by_ndef[ndef], num_pings_by_ndef[ndef] = '', '', pings
+
+                print("\t\t...a wrong ingress was attempted {} times!".format(wrong_ingr_cnt))
+                print("\t\t...no good ingress was possible {} times!".format(no_good_ingr_cnt))
+
+            # write the results out to corresponding files
+            for net_type in ['asn','bgp','s24']:
+                fd = 'af' if net_type == 'asn' else 'bf' if net_type == 'bgp' else 'sf'
+                for net_loc in ['fi','fo']:
+                    ndef = '{}_{}'.format(net_type, net_loc)
+                    try:
+                        writestr = '{},{},{},'.format(vp_chosen_by_ndef[ndef], num_hops_by_ndef[ndef], num_pings_by_ndef[ndef])
+                        eval('{}.write(\'{}\')'.format(fd, writestr))
+                    except KeyError:
+                        eval('{}.write(\',,,\')'.format(fd))
+
+
+        # BUG: This dnet was not recorded by the training set...?
+        else:
+            [eval('{}.write(\',,,,,,\')'.format(fd)) for fd in ['af','bf','sf']]
+
+
+
+
+
+
+        # evaluate rankings for destination cover
+        print("\t-I- stage-3-test: testing destination_cover...")
+
+        found = False
+        if dnets.bgp in dst_rankings_by_dnet:
+            for i, vp in enumerate(dst_rankings_by_dnet[dnets.bgp]):
+                if vp in dists and dists[vp] < 10:
+                    writestr = '{},{},{}'.format(vp, dists[vp], i + 1)
+                    [eval('{}.write(writestr)'.format(fd)) for fd in ['af','bf','sf']]
+                    found = True
+                    break
+            if not found:
+                writestr = ',,{}'.format(len(dst_rankings_by_dnet[dnets.bgp]))
+                [eval('{}.write(writestr)'.format(fd)) for fd in ['af','bf','sf']]
+        else:
+            [eval('{}.write(\',,\')'.format(fd)) for fd in ['af','bf','sf']]
+        [eval('{}.write(\'\\n\')'.format(fd)) for fd in ['af','bf','sf']]
+
+        # done testing rankings for this destination
+        print("done running tests for destination {} ...\n\n".format(dest))
+        af.flush()
+        bf.flush()
+        sf.flush()
+
+    af.close()
+    bf.close()
+    sf.close()
+    print("-I- stage-3-test: done.")

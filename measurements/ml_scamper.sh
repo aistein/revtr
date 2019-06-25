@@ -7,29 +7,19 @@
 # and shuffles them.  Finally, it runs scamper, and waits for the results.
 
 # Args:
-# 1 probe command to use with scamper in quotes (e.g. "ping -R -c 1")
-# 2 scamper rate limit 
-# 3 file containing list of nodes
-# 4 file containing list of destinations
-# 5 time (in seconds) that we must sleep before collecting results
-# 6 output directory
+# 1 file containing list of destinations
+# 2 output directory
 
-if [ $# -ne 4 ]; then
-   echo Usage: ml_scamper.sh scamper_command rate_limit dst_file\
-   out_dir
+if [ $# -ne 2 ]; then
+   echo Usage: ml_scamper.sh dst_file out_dir
    echo $# "arguments given"
    exit 1
 fi
 
-if [ -z "${username}" ] || [ -z "${password}" ]; then
-    echo "error: planetlab username and password have not been exported."
-    exit 1
-fi
-
-probe_command=$1
-rate_limit=$2
-local_dsts=$3
-out_dir=$4
+probe_command="ping -R -c 1"
+rate_limit=20
+local_dsts=$1
+out_dir=$2
 
 location=$(pwd)
 
@@ -37,7 +27,7 @@ location=$(pwd)
 sliceinfo_dir="$location/sliceinfo/`date +%Y%m%d`"
 if [ ! -d $sliceinfo_dir ]; then
    mkdir -p $sliceinfo_dir
-   $location/get_ml_slice_info.py $username $password $sliceinfo_dir
+   $location/get_ml_slice_info.py $sliceinfo_dir
    echo Getting active nodes...
    $location/get_ml_active_nodes.sh $sliceinfo_dir/uw_geoloc4_all_hostnames.txt \
       $sliceinfo_dir
@@ -52,8 +42,8 @@ fi
 
 # list of all nodes/ directory for remote destinations/ filename for remote
 # output
-#nodes="${sliceinfo_dir}/candidate_nodes.txt"
-nodes="$location/dummy_nodes.txt"
+nodes="${sliceinfo_dir}/candidate_nodes.txt"
+#nodes="$location/dummy_nodes.txt"
 remote_dsts="/home/uw_geoloc4/alex/in/dsts.txt"
 remote_warts="out/\${HOSTNAME}.warts"
 
