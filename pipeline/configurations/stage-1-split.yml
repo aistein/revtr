@@ -1,7 +1,7 @@
 download: false
 bgpdump: bgpdumps/ipasn20181203.dat
 rooturl: http://bgoodc.cs.columbia.edu/storage/measurements_2018/csv_echo_replies_20181201/
-datadir: data/4_3_2019
+datadir: data/6_25_2019
 vpdir: /data/vps
 numvps: 84
 numcpus: 16
