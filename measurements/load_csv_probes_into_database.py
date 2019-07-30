@@ -4,12 +4,12 @@ import os, sys
 import pymysql.cursors
 
 try:
-    csvdir = sys.argv[1]
-    csvfile = sys.argv[2]
-    rr_enabled = True if sys.argv[3] == 'rr' else False
+    csvfile = sys.argv[1]
 except IndexError:
-    sys.exit("usage: ./load_csv_pings_into_database.py <csv-dir> <csv-file-name>.csv <rr/ping>")
+    sys.exit("usage: ./load_csv_pings_into_database.py <csv-file-name>.csv")
 
+#csvdir = "/data/workspace/measurements/collections/6_25_2019-survey-measurements/csv"
+csvdir = "survey/internet_address_survey_reprobing_it84w-20190130/data/csv"
 blacklist = [
         ]
 
@@ -26,11 +26,9 @@ try:
     with connection.cursor() as cursor:
 
         full_filepath = os.path.join(csvdir, csvfile)
-        table = 'rr_pings_tbl' if rr_enabled else 'pings_tbl'
         sql = "LOAD DATA LOCAL INFILE '{}' ".format(full_filepath) +\
-              "INTO TABLE {} ".format(table) +\
-              "FIELDS TERMINATED BY ',' " +\
-              "SET ping_id = NULL;"
+              "INTO TABLE destinations_tbl " +\
+              "FIELDS TERMINATED BY ',';"
 
         vp_name = '.'.join(csvfile.split('.')[:-1])
         print("bulk-loading csv for VP {}...".format(vp_name))

@@ -16,7 +16,12 @@ if [ $# -ne 2 ]; then
    exit 1
 fi
 
-probe_command="ping -R -c 1"
+# RR-enabled probe command
+rr_probe_command="ping -R -c 1"
+
+# RR-disabled probe command
+ping_probe_command="ping -c 1"
+
 rate_limit=20
 local_dsts=$1
 out_dir=$2
@@ -45,10 +50,11 @@ fi
 nodes="${sliceinfo_dir}/candidate_nodes.txt"
 #nodes="$location/dummy_nodes.txt"
 remote_dsts="/home/uw_geoloc4/alex/in/dsts.txt"
-remote_warts="out/\${HOSTNAME}.warts"
+remote_rr_warts="out/rr/\${HOSTNAME}.warts"
+remote_ping_warts="out/ping/\${HOSTNAME}.warts"
 
 # create my directory on each node
-setup_command="rm -rf alex && mkdir -p alex/in && mkdir -p alex/out"
+setup_command="rm -rf alex && mkdir -p alex/in && mkdir -p alex/out/rr && mkdir -p alex/out/ping"
 echo Initializing nodes...
 parallel-ssh -h $nodes -l uw_geoloc4 -x "-p 806" -x "-i /home/ubuntu/.ssh/planetlab_id_rsa" $setup_command
 
@@ -62,8 +68,11 @@ parallel-ssh -h $nodes -l uw_geoloc4 -x "-p 806" -x "-i /home/ubuntu/.ssh/planet
 
 # run scamper on all nodes
 scamper_command="cd alex;\
-   sudo nohup /home/uw_geoloc4/plvp/scamper -c \"$probe_command\"\
-   -f in/dsts.txt -p $rate_limit -O warts -o $remote_warts &"
+   sudo nohup /home/uw_geoloc4/plvp/scamper -c \"$ping_probe_command\"\
+   -f in/dsts.txt -p $rate_limit -O warts -o $remote_ping_warts & \
+   sudo nohup /home/uw_geoloc4/plvp/scamper -c \"$rr_probe_command\"\
+   -f in/dsts.txt -p $rate_limit -O warts -o $remote_rr_warts &"
+
 printf "\nExecuting scamper...\n"
 parallel-ssh -h $nodes -l uw_geoloc4 -x "-p 806" -x "-i /home/ubuntu/.ssh/planetlab_id_rsa" $scamper_command
 
@@ -85,11 +94,14 @@ sleep $sleep_time
 # case
 printf "\nCollecting results...\n"
 
-mkdir -p $out_dir
+mkdir -p $out_dir/rr
+mkdir -p $out_dir/ping
 for i in {1..2}; do
     for n in $(cat $nodes); do
         rsync -avz -e "ssh -p 806 -i /home/ubuntu/.ssh/planetlab_id_rsa"\
-            uw_geoloc4@$n:alex/$remote_warts $out_dir
+            uw_geoloc4@$n:alex/$remote_rr_warts $out_dir/rr
+        rsync -avz -e "ssh -p 806 -i /home/ubuntu/.ssh/planetlab_id_rsa"\
+            uw_geoloc4@$n:alex/$remote_ping_warts $out_dir/ping
     done
 done
 
