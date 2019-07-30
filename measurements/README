@@ -1,0 +1,26 @@
+=============================================================
+How to change the mysql datadir if you run out of disk space?
+=============================================================
+
+1 initially, the mysql datadir (where files holding all tables are stored) is /var/lib/mysql
+
+2 move that entire directory to another disk with more space (/data/mysql)
+
+3 edit the mysql daemon config file to point to this new place
+    + sudo vim /etc/mysql/mysql.conf.d/mysqld.cnf
+      - change `datadir=/var/lib/mysql` to `datadir=/data/mysql`
+
+4 update the apparmor resources MySQL is allowed to access to include the new datadir
+    + sudo vim /etc/apparmor.d/usr.sbin.mysqld
+      - add in the following lines under "# Allow data dir access"
+
+    # (Custom) Allow new data dir access
+      /data/mysql/ r,
+      /data/mysql/** rwk,
+
+5 restart apparmord and mysqld
+    + sudo service mysql stop
+    + sudo service apparmor stop
+    + sudo service apparmor start
+    + sudo service mysql start
+

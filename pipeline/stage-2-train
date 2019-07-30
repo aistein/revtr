@@ -41,7 +41,7 @@ ic_done=$!
 echo starting proc $ic_done
 
 echo making popularity data...
-do_mapping=False
+do_mapping=True
 $scripts/calculate_training_ingress_popularity $train_dir/vp_measurements/all $results_dir/popularity $ipasn_file $do_mapping &
 pop_done=$!
 echo starting proc $pop_done

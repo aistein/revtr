@@ -6,7 +6,7 @@
 import sys
 import pymysql.cursors
 
-vpsfile= "./sliceinfo/20190624/candidate_nodes.txt"
+vpsfile= "./sliceinfo/20190625/candidate_nodes.txt"
 with open(vpsfile, 'r') as vpf:
     vps = set()
     for vp in vpf:

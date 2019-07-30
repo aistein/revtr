@@ -1,8 +1,8 @@
-test_dir: data/4_19_2019/test/vp_measurements/annotated/all 
+test_dir: data/6_25_2019/test/vp_measurements/annotated/all 
 #test_dir: data/test/test/vp_measurements/annotated/all 
-rankings_dir: data/4_19_2019/train_results
+rankings_dir: data/6_25_2019/train_results
 #rankings_dir: data/test/train_results
-output_dir: data/4_19_2019/test_results
+output_dir: data/6_25_2019/test_results
 #output_dir: data/test/test_results
 K: 10
 #K: 1
