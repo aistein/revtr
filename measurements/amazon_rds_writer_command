@@ -1,1 +1,1 @@
-mysql -h rtr-offline-aurora-db-inst.cdutp9pdmnzk.us-east-2.rds.amazonaws.com -P 3306 -u as5281 -p
+mysql -h rtr-offline-aurora-db-inst-us-east-2b.cdutp9pdmnzk.us-east-2.rds.amazonaws.com -P 3306 -u as5281 -p
