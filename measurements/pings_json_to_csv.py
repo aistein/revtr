@@ -75,6 +75,7 @@ for jsonfile in os.listdir(jsondir):
 
                 if echo_reply_found: 
                     ping_responsive = 'Y'
+                    # TODO: loop over all responses to search for RR-Responsive-ness
                     if rr_enabled and 'RR' in reply: 
                         rr_slots = [ipv4_index_of(hop_addr) for hop_addr in reply['RR']]
                         rr_responsive = 'Y'
